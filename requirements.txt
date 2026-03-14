@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+websockets
+httpx
+anthropic
+openai
+playwright
+pyautogui
+Pillow
+python-dotenv
+pydantic
