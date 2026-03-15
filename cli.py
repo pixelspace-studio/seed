@@ -241,7 +241,7 @@ async def _chat_async(verbose: bool = True):
     # the prompt updates from >> to > when Semillita finishes working.
     def _get_prompt():
         if is_working:
-            return ANSI('\033[33m>>\033[0m ')
+            return '>> '
         return '> '
 
     pt = PromptSession(key_bindings=kb)
