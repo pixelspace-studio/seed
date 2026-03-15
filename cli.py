@@ -297,45 +297,55 @@ async def _chat_async(verbose: bool = True, model: str = None):
         _version = "?"
     print(f"Semillita v{_version}")
     print("  Enter = send | Shift+Enter = newline | ESC = interrupt")
-    print("  Commands: /verbose on|off, /color HEX, exit\n")
+    print("  Commands: /model, /verbose on|off, /color HEX, exit\n")
+
+    _models_json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models.json")
+
+    async def _pick_model(out=print):
+        """Interactive model picker. Returns True if model was switched."""
+        try:
+            r = await client.get("/status", timeout=5)
+            current = r.json().get("model", "?")
+            with open(_models_json_path) as mf:
+                all_models = json.load(mf)
+            text_models = [
+                (mid, m["name"]) for mid, m in all_models.items()
+                if "text" in m.get("capabilities", [])
+            ]
+            out("  Models:")
+            for i, (mid, name) in enumerate(text_models, 1):
+                marker = " *" if mid == current else ""
+                out(f"    {i}. {name}{marker}")
+            out("")
+            choice = input("  Pick a number (enter to keep current): ").strip()
+            if choice and choice.isdigit():
+                idx = int(choice) - 1
+                if 0 <= idx < len(text_models):
+                    r = await client.post("/model", json={"text": text_models[idx][0]}, timeout=5)
+                    r.raise_for_status()
+                    out(f"  {r.json().get('result', '')}")
+                    return True
+                else:
+                    out("  Invalid choice.")
+            return False
+        except Exception as e:
+            out(f"  Model switch error: {e}")
+            return False
 
     # Switch model if requested via --model flag
     if model:
-        try:
-            if model == "__pick__":
-                # Interactive picker
-                r = await client.get("/status", timeout=5)
-                current = r.json().get("model", "?")
-                with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "models.json")) as mf:
-                    all_models = json.load(mf)
-                text_models = [
-                    (mid, m["name"]) for mid, m in all_models.items()
-                    if "text" in m.get("capabilities", [])
-                ]
-                print("  Models:")
-                for i, (mid, name) in enumerate(text_models, 1):
-                    marker = " *" if mid == current else ""
-                    print(f"    {i}. {name}{marker}")
-                print()
-                choice = input("  Pick a number (enter to keep current): ").strip()
-                if choice and choice.isdigit():
-                    idx = int(choice) - 1
-                    if 0 <= idx < len(text_models):
-                        model = text_models[idx][0]
-                    else:
-                        print("  Invalid choice.\n")
-                        model = None
-                else:
-                    model = None
-            if model and model != "__pick__":
+        if model == "__pick__":
+            await _pick_model()
+        else:
+            try:
                 r = await client.post("/model", json={"text": model}, timeout=5)
                 r.raise_for_status()
                 print(f"  {r.json().get('result', '')}\n")
-        except httpx.ConnectError:
-            print("  Error: Semillita is not running. Use 'seed start' first.")
-            return
-        except Exception as e:
-            print(f"  Model switch error: {e}\n")
+            except httpx.ConnectError:
+                print("  Error: Semillita is not running. Use 'seed start' first.")
+                return
+            except Exception as e:
+                print(f"  Model switch error: {e}\n")
 
     ws_task = asyncio.create_task(ws_listener())
     await asyncio.sleep(0.3)  # let WS connect
@@ -359,6 +369,11 @@ async def _chat_async(verbose: bool = True, model: str = None):
                         if len(parts) >= 2:
                             verbose = parts[1].lower() == "on"
                         _cprint(f"Verbose: {'on' if verbose else 'off'}")
+                        continue
+
+                    # /model command
+                    if text.lower() == "/model":
+                        await _pick_model(out=_cprint)
                         continue
 
                     # /color command
