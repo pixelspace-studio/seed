@@ -187,30 +187,6 @@ case "${1:-help}" in
       fi
     fi
 
-    # MODEL
-    current="${MODEL:-claude-sonnet-4-6}"
-    printf "  Model [%s]: " "$current"
-    read -r input
-    if [ -n "$input" ]; then
-      if grep -q "^MODEL=" .env 2>/dev/null; then
-        sed -i '' "s|^MODEL=.*|MODEL=$input|" .env
-      else
-        echo "MODEL=$input" >> .env
-      fi
-    fi
-
-    # PORT
-    current="${SEED_PORT:-9999}"
-    printf "  Port [%s]: " "$current"
-    read -r input
-    if [ -n "$input" ]; then
-      if grep -q "^SEED_PORT=" .env 2>/dev/null; then
-        sed -i '' "s|^SEED_PORT=.*|SEED_PORT=$input|" .env
-      else
-        echo "SEED_PORT=$input" >> .env
-      fi
-    fi
-
     echo ""
     echo "  Configuration saved to .env"
     echo "  Start Seed with: ./seed.sh start"
