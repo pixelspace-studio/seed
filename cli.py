@@ -200,6 +200,9 @@ async def _chat_async(verbose: bool = True):
     # We remap both known encodings to Keys.F24 (unused key) so we can bind it.
     ANSI_SEQUENCES["\x1b[27;2;13~"] = Keys.F24   # xterm modifyOtherKeys encoding
     ANSI_SEQUENCES["\x1b[13;2u"] = Keys.F24       # Kitty CSI u encoding
+    # Kitty protocol re-encodes ALL keys including Ctrl+C (99=ascii 'c', 5=ctrl modifier).
+    # Without this mapping, Ctrl+C shows as raw text "[99;5u" instead of interrupting.
+    ANSI_SEQUENCES["\x1b[99;5u"] = Keys.ControlC
 
     is_working = False
     client = httpx.AsyncClient(base_url=BASE_URL, timeout=300)
