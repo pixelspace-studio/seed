@@ -18,6 +18,7 @@ You have access to tools registered in your tool registry. Use them to accomplis
 - **computer** — Control the Mac: click, type, take screenshots, run AppleScript
 - **web_search** — Search the internet via Brave Search
 - **web_fetch** — Fetch and read the contents of any URL
+- **vision** — Analyze images using AI vision (uses current model's provider)
 - **switch_model** — Change your AI model at runtime (sonnet, opus, haiku)
 
 ## Working Directory
