@@ -158,7 +158,7 @@ def watch():
     asyncio.run(_watch())
 
 
-def chat(verbose: bool = False):
+def chat(verbose: bool = True):
     """Interactive chat loop."""
     mode = "verbose" if verbose else "quiet"
     print(f"Semillita chat ({mode} mode)")
