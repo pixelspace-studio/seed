@@ -23,22 +23,40 @@
     "context": 128000,
     "capabilities": ["text", "vision"]
   },
-  "gemini-2.5-pro": {
+  "gemini-3.1-pro-preview": {
     "provider": "google",
-    "name": "Gemini 2.5 Pro",
-    "context": 1000000,
-    "capabilities": ["text", "vision", "image_gen"]
+    "name": "Gemini 3.1 Pro",
+    "context": 1048576,
+    "capabilities": ["text", "vision"]
   },
-  "gemini-2.5-flash": {
+  "gemini-3-flash-preview": {
     "provider": "google",
-    "name": "Gemini 2.5 Flash",
-    "context": 1000000,
-    "capabilities": ["text", "vision", "image_gen"]
+    "name": "Gemini 3 Flash",
+    "context": 1048576,
+    "capabilities": ["text", "vision"]
+  },
+  "gemini-3.1-flash-lite-preview": {
+    "provider": "google",
+    "name": "Gemini 3.1 Flash-Lite",
+    "context": 1048576,
+    "capabilities": ["text", "vision"]
   },
   "gpt-image-1.5": {
     "provider": "openai",
     "name": "GPT Image 1.5",
     "context": null,
+    "capabilities": ["image_gen"]
+  },
+  "gemini-3.1-flash-image-preview": {
+    "provider": "google",
+    "name": "Nano Banana 2",
+    "context": 128000,
+    "capabilities": ["image_gen"]
+  },
+  "gemini-3-pro-image-preview": {
+    "provider": "google",
+    "name": "Nano Banana Pro",
+    "context": 65000,
     "capabilities": ["image_gen"]
   },
   "imagen-4.0-generate-001": {
