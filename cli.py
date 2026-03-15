@@ -13,7 +13,7 @@ BASE_URL = "http://localhost:9999"
 WS_URL = "ws://localhost:9999/stream"
 
 # Semillita's voice color (hex, default hot pink)
-_response_color = "00FFFF"
+_response_color = "A3F7FF"
 
 
 def _colorize(text: str) -> str:
