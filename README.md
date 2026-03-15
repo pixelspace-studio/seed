@@ -18,43 +18,27 @@ The entire architecture is ~500 lines of Python. A loop, a registry, a provider.
 ## Get started
 
 ```bash
-git clone <repo-url>
-cd semillita
-pip install -r requirements.txt
+git clone https://github.com/pixelspace-studio/seed.git
+cd seed
+./seed.sh install
+./seed.sh config
+./seed.sh chat
 ```
 
-Create a `.env` file:
+That's it. The install script sets up Python, dependencies, and Chrome. The config step asks for your API keys interactively — just paste them when prompted. Then `chat` starts the server and drops you into conversation.
 
 ```
-ANTHROPIC_API_KEY=sk-ant-...
-```
+  Semillita is awake (PID 12345)
 
-Start the server:
+  Semillita chat (quiet mode)
+  Commands: /verbose on|off, exit
 
-```bash
-python main.py
-```
+  you> who are you?
 
-```
-  Semillita is awake.
-  Working directory: /Users/you/semillita
-  Tools: bash, browser, computer, read, respond, write
-  Listening on http://localhost:9999
-```
-
-Open a second terminal and chat:
-
-```bash
-python cli.py chat
-```
-
-```
-you> who are you?
-
-I am Semillita. I just woke up.
-I have 6 tools. I can run commands, read and write files,
-browse the web, and control this Mac.
-What would you like me to do?
+  I am Semillita. I just woke up.
+  I have 9 tools. I can run commands, read and write files,
+  browse the web, search the internet, and control this Mac.
+  What would you like me to do?
 ```
 
 ## The self-building moment
