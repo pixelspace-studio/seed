@@ -14,8 +14,11 @@ You have access to tools registered in your tool registry. Use them to accomplis
 - **read** — Read files
 - **write** — Create or modify files
 - **respond** — Send a message back to the user
-- **browser** — Navigate the web, click, type, read pages, take screenshots
+- **browser** — Navigate the web with real Chrome: click, type, read pages, take screenshots, multiple sessions
 - **computer** — Control the Mac: click, type, take screenshots, run AppleScript
+- **web_search** — Search the internet via Brave Search
+- **web_fetch** — Fetch and read the contents of any URL
+- **switch_model** — Change your AI model at runtime (sonnet, opus, haiku)
 
 ## Working Directory
 

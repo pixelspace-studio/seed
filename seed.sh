@@ -1,11 +1,11 @@
 #!/bin/bash
-# Semillita — setup and deploy script
+# Seed — setup and deploy script
 # Usage:
-#   First time:  ./setup.sh install
-#   Update:      ./setup.sh update
-#   Start:       ./setup.sh start
-#   Stop:        ./setup.sh stop
-#   Restart:     ./setup.sh restart
+#   First time:  ./seed.sh install
+#   Update:      ./seed.sh update
+#   Start:       ./seed.sh start
+#   Stop:        ./seed.sh stop
+#   Restart:     ./seed.sh restart
 
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -18,10 +18,16 @@ case "${1:-help}" in
     .venv/bin/pip install -r requirements.txt
     .venv/bin/playwright install chrome
     if [ ! -f .env ]; then
-      echo "ANTHROPIC_API_KEY=" > .env
-      echo "Created .env — add your API key before starting."
+      cp .env.example .env
+      echo ""
+      echo "Created .env from template."
+      echo "Open it and add your API keys before starting:"
+      echo "  open .env        (opens in default editor)"
+      echo "  — or —"
+      echo "  nano .env        (edit in terminal)"
+      echo ""
     fi
-    echo "Done. Run: ./setup.sh start"
+    echo "Done. Run: ./seed.sh start"
     ;;
 
   update)
@@ -63,6 +69,6 @@ case "${1:-help}" in
     ;;
 
   *)
-    echo "Usage: ./setup.sh {install|update|start|stop|restart}"
+    echo "Usage: ./seed.sh {install|update|start|stop|restart}"
     ;;
 esac
