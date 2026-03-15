@@ -226,7 +226,7 @@ async def _chat_async(verbose: bool = True, model: str = None):
     def _newline(event):
         event.current_buffer.insert_text('\n')
 
-    @kb.add('escape', eager=True)  # ESC — interrupt current work
+    @kb.add('escape')  # ESC — interrupt current work
     def _escape(event):
         if is_working:
             asyncio.ensure_future(_send_interrupt())
