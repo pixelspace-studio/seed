@@ -23,6 +23,72 @@ class ProviderResponse:
     usage: dict = field(default_factory=dict)
 
 
+def _sanitize_messages(messages):
+    """Fix orphaned tool_use/tool_result pairs anywhere in the message history.
+
+    Anthropic requires:
+    - Every tool_use must have a tool_result immediately after
+    - Every tool_result must reference a tool_use in the previous message
+
+    This function handles both cases by collecting all IDs and patching gaps.
+    """
+    # Collect all tool_use IDs and all tool_result IDs
+    tool_use_ids = set()
+    tool_result_ids = set()
+    for msg in messages:
+        if msg.get("role") == "assistant":
+            for tc in msg.get("tool_calls", []):
+                tool_use_ids.add(tc["id"])
+        elif msg.get("role") == "tool_result":
+            tool_result_ids.add(msg.get("tool_use_id"))
+
+    # Find orphaned tool_uses (no matching tool_result)
+    orphaned_uses = tool_use_ids - tool_result_ids
+    # Find orphaned tool_results (no matching tool_use)
+    orphaned_results = tool_result_ids - tool_use_ids
+
+    if not orphaned_uses and not orphaned_results:
+        return messages
+
+    log.warning(f"Sanitizing messages: {len(orphaned_uses)} orphaned tool_uses, {len(orphaned_results)} orphaned tool_results")
+
+    cleaned = []
+    for msg in messages:
+        role = msg.get("role", "user")
+
+        if role == "tool_result" and msg.get("tool_use_id") in orphaned_results:
+            # Drop tool_results with no matching tool_use
+            continue
+
+        if role == "assistant" and msg.get("tool_calls"):
+            # Check if ALL tool_calls in this message are orphaned
+            msg_tc_ids = {tc["id"] for tc in msg.get("tool_calls", [])}
+            if msg_tc_ids.issubset(orphaned_uses):
+                # Every tool_call is orphaned — keep only the text content
+                if msg.get("content"):
+                    cleaned.append({"role": "assistant", "content": msg["content"]})
+                continue
+            elif msg_tc_ids & orphaned_uses:
+                # Some tool_calls are orphaned — remove only those
+                good_tcs = [tc for tc in msg["tool_calls"] if tc["id"] not in orphaned_uses]
+                new_msg = dict(msg)
+                new_msg["tool_calls"] = good_tcs
+                cleaned.append(new_msg)
+                continue
+
+        cleaned.append(msg)
+
+    # Strip leading tool_results or assistant+tool_calls from the start
+    while cleaned and cleaned[0].get("role") == "tool_result":
+        cleaned = cleaned[1:]
+    if cleaned and cleaned[0].get("role") == "assistant" and cleaned[0].get("tool_calls"):
+        cleaned = cleaned[1:]
+        while cleaned and cleaned[0].get("role") == "tool_result":
+            cleaned = cleaned[1:]
+
+    return cleaned
+
+
 async def send(
     messages: list[dict],
     tools: list[dict],
@@ -42,34 +108,16 @@ async def send(
             "input_schema": t["parameters"],
         })
 
-    # Skip leading tool_result messages (orphaned by context truncation)
-    start = 0
-    while start < len(messages) and messages[start].get("role") == "tool_result":
-        start += 1
-    messages = messages[start:]
-
-    # Also skip if first message is an assistant with tool_calls (its results got cut)
-    if messages and messages[0].get("role") == "assistant" and messages[0].get("tool_calls"):
-        messages = messages[1:]
-        # Skip any following tool_results from that assistant
-        while messages and messages[0].get("role") == "tool_result":
-            messages = messages[1:]
-
-    # Collect all tool_use IDs present in assistant messages
-    tool_use_ids = set()
-    for msg in messages:
-        if msg.get("role") == "assistant":
-            for tc in msg.get("tool_calls", []):
-                tool_use_ids.add(tc["id"])
+    # Sanitize messages: fix orphaned tool_use/tool_result pairs anywhere in history.
+    # This can happen when a session is interrupted mid-tool-call, context is truncated,
+    # or the user sends input that breaks a tool exchange.
+    messages = _sanitize_messages(messages)
 
     # Convert messages to Anthropic format
     api_messages = []
     for msg in messages:
         role = msg.get("role", "user")
         if role == "tool_result":
-            # Skip orphaned tool_results whose tool_use is missing
-            if msg.get("tool_use_id") not in tool_use_ids:
-                continue
             api_messages.append({
                 "role": "user",
                 "content": [{
