@@ -28,7 +28,8 @@ def _context_for_model(model_id: str, models: dict) -> int:
 class Config:
     anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
-    google_api_key: str = os.getenv("GOOGLE_API_KEY", "")
+    google_ai_api_key: str = os.getenv("GOOGLE_AI_API_KEY", "")  # Gemini models (AI Studio)
+    google_api_key: str = os.getenv("GOOGLE_API_KEY", "")        # Other Google APIs (Maps, etc.)
     model: str = "claude-sonnet-4-6"
     host: str = os.getenv("SEED_HOST", "localhost")
     port: int = int(os.getenv("SEED_PORT", "9999"))

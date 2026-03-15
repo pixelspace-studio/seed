@@ -359,6 +359,6 @@ async def send(
     if provider == "openai":
         return await _send_openai(messages, tools, model, system, cfg.openai_api_key)
     elif provider == "google":
-        return await _send_google(messages, tools, model, system, cfg.google_api_key)
+        return await _send_google(messages, tools, model, system, cfg.google_ai_api_key)
     else:
         return await _send_anthropic(messages, tools, model, system, cfg.anthropic_api_key)
