@@ -50,3 +50,6 @@ data/
 
 # Claude Code
 .claude/
+
+# PID file
+.pid
