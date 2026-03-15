@@ -17,7 +17,21 @@ class Config:
     working_dir: str = os.path.dirname(os.path.abspath(__file__))
     seed_dir: str = os.path.dirname(os.path.abspath(__file__))
     max_iterations: int = 25
-    max_context_messages: int = 50
+
+    # Sliding context window
+    # MAX_CONTEXT_TOKENS: how many tokens of history to send to the model.
+    # Leave headroom vs the model's hard limit for the response and tool schemas.
+    # Sonnet = 200K limit → default 180K. Opus = 1M → raise to e.g. 900000.
+    max_context_tokens: int = int(os.getenv("MAX_CONTEXT_TOKENS", "180000"))
+
+    # CONTEXT_KEEP_RECENT: minimum number of messages that are NEVER evicted,
+    # regardless of token count. Protects the tail of the conversation.
+    context_keep_recent: int = int(os.getenv("CONTEXT_KEEP_RECENT", "10"))
+
+    # CHARS_PER_TOKEN: characters-per-token ratio for fast token estimation.
+    # Research consensus: 4 for English/Spanish prose, 3.5 for code-heavy sessions.
+    # Anthropic, OpenAI, and Gemini all converge to ~4 for Latin-script text.
+    chars_per_token: float = float(os.getenv("CHARS_PER_TOKEN", "4"))
 
     protected_paths: list[str] = field(default_factory=lambda: [
         "main.py",

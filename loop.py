@@ -30,7 +30,7 @@ async def run(
         system_prompt = f.read()
 
     # Build messages: history + new message
-    messages = session.get_context()
+    messages = session.get_context(cfg=config)
     user_msg = {"role": "user", "content": message, "source": source}
     session.append(user_msg)
     messages.append(user_msg)
