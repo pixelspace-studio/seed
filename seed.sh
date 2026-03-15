@@ -96,6 +96,7 @@ case "${1:-help}" in
     echo "  Found Python $PY_VER at $PYTHON"
     echo ""
 
+    rm -rf .venv
     "$PYTHON" -m venv .venv
     .venv/bin/pip install -r requirements.txt
     .venv/bin/playwright install chrome 2>/dev/null
