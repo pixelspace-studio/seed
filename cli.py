@@ -17,8 +17,24 @@ WS_URL = "ws://localhost:9999/stream"
 _response_color = "A3F7FF"
 
 
+def _wordwrap(text: str) -> str:
+    """Word-wrap text to terminal width, preserving existing newlines."""
+    import shutil
+    import textwrap
+    width = shutil.get_terminal_size().columns
+    lines = text.split("\n")
+    wrapped = []
+    for line in lines:
+        if len(line) <= width:
+            wrapped.append(line)
+        else:
+            wrapped.append(textwrap.fill(line, width=width))
+    return "\n".join(wrapped)
+
+
 def _colorize(text: str) -> str:
-    """Wrap text in 24-bit ANSI color using _response_color."""
+    """Word-wrap and colorize text for display."""
+    text = _wordwrap(text)
     h = _response_color.lstrip("#")
     r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
     return f"\033[38;2;{r};{g};{b}m{text}\033[0m"
