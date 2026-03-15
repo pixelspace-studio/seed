@@ -178,26 +178,43 @@ def chat(verbose: bool = True):
 async def _chat_async(verbose: bool = True):
     """Async chat: always-active input, inject while working, ESC to stop."""
     from prompt_toolkit import PromptSession
+    from prompt_toolkit import print_formatted_text as ptprint
     from prompt_toolkit.key_binding import KeyBindings
     from prompt_toolkit.patch_stdout import patch_stdout
     from prompt_toolkit.formatted_text import ANSI
     from prompt_toolkit.input.ansi_escape_sequences import ANSI_SEQUENCES
     from prompt_toolkit.keys import Keys
+    from prompt_toolkit.application import get_app_or_none
     import websockets
+
+    # Activate Kitty keyboard protocol so terminal sends distinct
+    # escape sequences for Shift+Enter, Ctrl+Enter, etc.
+    sys.stdout.write("\x1b[>1u")
+    sys.stdout.flush()
 
     # Remap Shift+Enter to F24 (unused) so we can bind it separately from Enter.
     # xterm "modifyOtherKeys" encoding:
     ANSI_SEQUENCES["\x1b[27;2;13~"] = Keys.F24
-    # CSI u encoding (kitty/iTerm2/modern terminals):
+    # Kitty protocol / CSI u encoding:
     ANSI_SEQUENCES["\x1b[13;2u"] = Keys.F24
 
     is_working = False
     client = httpx.AsyncClient(base_url=BASE_URL, timeout=300)
 
+    def _cprint(text):
+        """Print colored text properly through prompt_toolkit's renderer."""
+        ptprint(ANSI(text))
+
+    def _refresh_prompt():
+        """Force prompt redraw (updates inject>/you> when state changes)."""
+        app = get_app_or_none()
+        if app:
+            app.invalidate()
+
     # --- Key bindings ---
     kb = KeyBindings()
 
-    @kb.add(Keys.F24)             # Shift+Enter — newline (xterm/CSI u terminals)
+    @kb.add(Keys.F24)             # Shift+Enter — newline
     @kb.add('escape', 'enter')    # Esc+Enter (Alt+Enter) — newline fallback
     def _newline(event):
         event.current_buffer.insert_text('\n')
@@ -207,6 +224,12 @@ async def _chat_async(verbose: bool = True):
             await client.post("/interrupt", timeout=5)
         except Exception:
             pass
+
+    # Dynamic prompt: updates automatically when is_working changes
+    def _get_prompt():
+        if is_working:
+            return ANSI('\033[33minject>\033[0m ')
+        return 'you> '
 
     pt = PromptSession(key_bindings=kb)
 
@@ -223,14 +246,14 @@ async def _chat_async(verbose: bool = True):
                         if verbose:
                             fmt = _format_event(data)
                             if fmt:
-                                print(fmt)
+                                _cprint(fmt)
 
                         if t == "response_complete":
-                            # Don't print here — send_msg prints the response
-                            # to avoid double output.
                             is_working = False
+                            _refresh_prompt()
                         elif t in ("idle", "interrupted"):
                             is_working = False
+                            _refresh_prompt()
             except asyncio.CancelledError:
                 return
             except Exception:
@@ -243,17 +266,18 @@ async def _chat_async(verbose: bool = True):
             r = await client.post("/message", json={"text": text})
             r.raise_for_status()
             result = r.json().get("response", "")
-            print(f"\n{_colorize(result)}\n")
+            _cprint(f"\n{_colorize(result)}\n")
         except httpx.ConnectError:
-            print("\n  Error: Semillita is not running.\n")
+            _cprint("\n  Error: Semillita is not running.\n")
         except Exception as e:
-            print(f"\n  Error: {e}\n")
+            _cprint(f"\n  Error: {e}\n")
         finally:
             is_working = False
+            _refresh_prompt()
 
     # --- Main loop ---
     print("Semillita chat")
-    print("  Enter = send | Esc+Enter = newline | Ctrl+C = stop")
+    print("  Enter = send | Shift+Enter = newline | Ctrl+C = stop")
     print("  Commands: /verbose on|off, /color HEX, exit\n")
 
     ws_task = asyncio.create_task(ws_listener())
@@ -263,9 +287,7 @@ async def _chat_async(verbose: bool = True):
         with patch_stdout():
             while True:
                 try:
-                    # Use prompt_toolkit ANSI formatter (not raw escape codes)
-                    prompt = ANSI('\033[33minject>\033[0m ') if is_working else 'you> '
-                    text = await pt.prompt_async(prompt)
+                    text = await pt.prompt_async(_get_prompt)
                     text = text.strip()
 
                     if not text:
@@ -278,7 +300,7 @@ async def _chat_async(verbose: bool = True):
                         parts = text.split()
                         if len(parts) >= 2:
                             verbose = parts[1].lower() == "on"
-                        print(f"Verbose: {'on' if verbose else 'off'}")
+                        _cprint(f"Verbose: {'on' if verbose else 'off'}")
                         continue
 
                     # /color command
@@ -289,11 +311,11 @@ async def _chat_async(verbose: bool = True):
                             c = parts[1].lstrip("#")
                             if len(c) == 6 and all(ch in "0123456789abcdefABCDEF" for ch in c):
                                 _response_color = c.upper()
-                                print(f"Color: {_colorize(_response_color)}")
+                                _cprint(f"Color: {_colorize(_response_color)}")
                             else:
-                                print("Invalid hex color. Use: /color FF005A")
+                                _cprint("Invalid hex color. Use: /color FF005A")
                         else:
-                            print(f"Color: {_colorize(_response_color)}")
+                            _cprint(f"Color: {_colorize(_response_color)}")
                         continue
 
                     if is_working:
@@ -301,7 +323,7 @@ async def _chat_async(verbose: bool = True):
                         try:
                             await client.post("/inject", json={"text": text}, timeout=5)
                         except Exception as e:
-                            print(f"  inject error: {e}")
+                            _cprint(f"  inject error: {e}")
                     else:
                         # Send as new message (non-blocking)
                         is_working = True
@@ -317,6 +339,9 @@ async def _chat_async(verbose: bool = True):
     finally:
         ws_task.cancel()
         await client.aclose()
+        # Deactivate Kitty keyboard protocol
+        sys.stdout.write("\x1b[<u")
+        sys.stdout.flush()
 
     print("\nbye.")
 
