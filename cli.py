@@ -180,6 +180,7 @@ async def _chat_async(verbose: bool = True):
     from prompt_toolkit import PromptSession
     from prompt_toolkit.key_binding import KeyBindings
     from prompt_toolkit.patch_stdout import patch_stdout
+    from prompt_toolkit.formatted_text import ANSI
     from prompt_toolkit.input.ansi_escape_sequences import ANSI_SEQUENCES
     from prompt_toolkit.keys import Keys
     import websockets
@@ -187,7 +188,7 @@ async def _chat_async(verbose: bool = True):
     # Remap Shift+Enter to F24 (unused) so we can bind it separately from Enter.
     # xterm "modifyOtherKeys" encoding:
     ANSI_SEQUENCES["\x1b[27;2;13~"] = Keys.F24
-    # CSI u encoding (kitty/iTerm2):
+    # CSI u encoding (kitty/iTerm2/modern terminals):
     ANSI_SEQUENCES["\x1b[13;2u"] = Keys.F24
 
     is_working = False
@@ -196,7 +197,7 @@ async def _chat_async(verbose: bool = True):
     # --- Key bindings ---
     kb = KeyBindings()
 
-    @kb.add(Keys.F24)             # Shift+Enter — newline
+    @kb.add(Keys.F24)             # Shift+Enter — newline (xterm/CSI u terminals)
     @kb.add('escape', 'enter')    # Esc+Enter (Alt+Enter) — newline fallback
     def _newline(event):
         event.current_buffer.insert_text('\n')
@@ -225,7 +226,8 @@ async def _chat_async(verbose: bool = True):
                                 print(fmt)
 
                         if t == "response_complete":
-                            print(f"\n{_colorize(data.get('text', ''))}\n")
+                            # Don't print here — send_msg prints the response
+                            # to avoid double output.
                             is_working = False
                         elif t in ("idle", "interrupted"):
                             is_working = False
@@ -240,23 +242,18 @@ async def _chat_async(verbose: bool = True):
         try:
             r = await client.post("/message", json={"text": text})
             r.raise_for_status()
-            # Response is printed by ws_listener on response_complete.
-            # Fallback: if ws_listener missed it (disconnected), print here.
-            if is_working:
-                result = r.json().get("response", "")
-                print(f"\n{_colorize(result)}\n")
-                is_working = False
+            result = r.json().get("response", "")
+            print(f"\n{_colorize(result)}\n")
         except httpx.ConnectError:
             print("\n  Error: Semillita is not running.\n")
-            is_working = False
         except Exception as e:
-            if is_working:
-                print(f"\n  Error: {e}\n")
-                is_working = False
+            print(f"\n  Error: {e}\n")
+        finally:
+            is_working = False
 
     # --- Main loop ---
     print("Semillita chat")
-    print("  Enter = send | Shift+Enter = newline | Ctrl+C = stop")
+    print("  Enter = send | Esc+Enter = newline | Ctrl+C = stop")
     print("  Commands: /verbose on|off, /color HEX, exit\n")
 
     ws_task = asyncio.create_task(ws_listener())
@@ -266,7 +263,8 @@ async def _chat_async(verbose: bool = True):
         with patch_stdout():
             while True:
                 try:
-                    prompt = "\033[33minject>\033[0m " if is_working else "you> "
+                    # Use prompt_toolkit ANSI formatter (not raw escape codes)
+                    prompt = ANSI('\033[33minject>\033[0m ') if is_working else 'you> '
                     text = await pt.prompt_async(prompt)
                     text = text.strip()
 
