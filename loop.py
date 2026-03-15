@@ -82,8 +82,8 @@ async def run(
             messages=messages,
             tools=tools_schema,
             model=config.model,
-            api_key=config.anthropic_api_key,
             system=system_prompt,
+            cfg=config,
         )
 
         # No tool calls → check for injected messages before returning.

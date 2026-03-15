@@ -4,6 +4,7 @@ websockets
 httpx
 anthropic
 openai
+google-genai
 playwright
 pyautogui
 Pillow

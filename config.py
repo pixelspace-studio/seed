@@ -11,6 +11,7 @@ load_dotenv()
 class Config:
     anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
+    google_api_key: str = os.getenv("GOOGLE_API_KEY", "")
     model: str = os.getenv("MODEL", "claude-sonnet-4-6")
     host: str = os.getenv("SEED_HOST", "localhost")
     port: int = int(os.getenv("SEED_PORT", "9999"))
