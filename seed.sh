@@ -170,6 +170,23 @@ case "${1:-help}" in
       fi
     fi
 
+    # ELEVENLABS_API_KEY
+    current="${ELEVENLABS_API_KEY}"
+    if [ -n "$current" ]; then
+      display="...${current: -8}"
+    else
+      display="(not set)"
+    fi
+    printf "  ElevenLabs API Key [%s]: " "$display"
+    read -r input
+    if [ -n "$input" ]; then
+      if grep -q "^ELEVENLABS_API_KEY=" .env 2>/dev/null; then
+        sed -i '' "s|^ELEVENLABS_API_KEY=.*|ELEVENLABS_API_KEY=$input|" .env
+      else
+        echo "ELEVENLABS_API_KEY=$input" >> .env
+      fi
+    fi
+
     # BRAVE_SEARCH_API_KEY
     current="${BRAVE_SEARCH_API_KEY}"
     if [ -n "$current" ]; then
