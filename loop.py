@@ -86,10 +86,39 @@ async def run(
             system=system_prompt,
         )
 
-        # No tool calls → final response
+        # No tool calls → check for injected messages before returning.
+        # User may have typed while provider_send() was blocking.
         if not response.tool_calls:
+            has_injected = False
+            if inject_queue and not inject_queue.empty():
+                while not inject_queue.empty():
+                    try:
+                        injected = inject_queue.get_nowait()
+                        inject_msg = {
+                            "role": "user",
+                            "content": injected["text"],
+                            "source": injected.get("source", "human"),
+                        }
+                        messages.append(inject_msg)
+                        session.append(inject_msg)
+                        emit({
+                            "type": "message_received",
+                            "source": inject_msg["source"],
+                            "text": injected["text"],
+                            "injected": True,
+                        })
+                        has_injected = True
+                    except asyncio.QueueEmpty:
+                        break
+            if has_injected:
+                # Don't return yet — save the response and loop again
+                # so the model sees the injected messages.
+                assistant_msg = {"role": "assistant", "content": response.content}
+                messages.append(assistant_msg)
+                session.append(assistant_msg)
+                continue
+
             text = response.content
-            # If empty but we got a respond tool result, use that
             if not text and last_respond:
                 text = last_respond
             assistant_msg = {"role": "assistant", "content": text}
