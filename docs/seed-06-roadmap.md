@@ -1,0 +1,262 @@
+# Seed — Roadmap
+
+Living document. Updated March 15, 2026.
+
+The guiding principle: **build the minimum core so Semillita can improve herself.** Every feature we add to core should unlock the agent's ability to do more on her own.
+
+---
+
+## 1. Fix What's Broken
+
+Before new features, fix the issues from the [code review](seed-05-code-review-2026-03-15.md):
+
+- [ ] Fix browser.py — complete the execute function
+- [ ] Dynamic `max_tokens` per model (not hard-coded 8192)
+- [ ] Validate API key exists before model switch
+- [ ] Fix write_file.py changelog bug
+- [ ] Pin dependency versions in requirements.txt
+- [ ] Replace `.reload_flag` with asyncio.Event
+
+---
+
+## 2. Browser and Computer Use
+
+The browser and computer tools are the weakest part right now. Without reliable browser and desktop control, the agent is limited to text and code.
+
+### Browser
+- Fix the broken execute function in browser.py
+- Improve session management (stale session cleanup, port allocation)
+- Add cookie/localStorage persistence across calls
+- Investigate headless vs real Chrome tradeoffs
+- Add skill docs (markdown instructions for the agent on how to use browser effectively)
+
+### Computer Use
+- Investigate **Google Gemini's computer use model** — native screen understanding
+- Investigate **Anthropic's computer use** (released ~2025) — Claude can see and interact with screens
+- Improve PyAutoGUI reliability: bounds checking, success verification, wait-for-result
+- Consider replacing custom computer.py with a provider's native computer use if it's good enough
+
+### Goal
+The agent should be able to: open a browser, navigate to a site, fill forms, extract data, take screenshots, and interact with desktop apps — reliably.
+
+---
+
+## 3. Gateway and Communication Channels
+
+A gateway system to connect Semillita to the outside world — and the outside world to Semillita.
+
+### Architecture
+```
+External Channels          Gateway            Semillita
+┌──────────────┐      ┌──────────────┐      ┌──────────┐
+│  WhatsApp    │─────▶│              │─────▶│          │
+│  Slack       │─────▶│   gateway.py │─────▶│  /message│
+│  Telegram    │─────▶│              │─────▶│  /inject │
+│  Email       │─────▶│  normalize   │      │          │
+│  Webhooks    │─────▶│  route       │◀─────│  events  │
+└──────────────┘      │  deliver     │      └──────────┘
+                      └──────────────┘
+```
+
+### Design
+- Each channel is a plugin (like tools) — a Python file with `receive()` and `send()`
+- Gateway normalizes all incoming messages to `{"text": ..., "source": "whatsapp", "metadata": {...}}`
+- Gateway delivers outgoing messages to the right channel based on source
+- All channels talk to the existing `/message` and `/inject` endpoints
+- Agent can reply to the channel the message came from, or broadcast to multiple
+
+### Channels to implement
+- [ ] WhatsApp (via Twilio or WhatsApp Business API)
+- [ ] Slack (via Slack Bot API)
+- [ ] Telegram (via Bot API — simplest to start with)
+- [ ] Email (IMAP/SMTP)
+- [ ] Webhooks (generic HTTP callbacks)
+
+---
+
+## 4. Memory System
+
+Current state: sliding context window only. No long-term memory.
+
+### Proposed architecture
+```
+┌─────────────────────────────────────┐
+│           Working Memory            │
+│   (sliding context window — today)  │
+└──────────────┬──────────────────────┘
+               │ summarize + extract
+┌──────────────▼──────────────────────┐
+│          Episodic Memory            │
+│   conversation summaries, events    │
+│   "what happened" — timestamped     │
+└──────────────┬──────────────────────┘
+               │
+┌──────────────▼──────────────────────┐
+│          Semantic Memory            │
+│   facts, preferences, knowledge     │
+│   "what I know" — structured        │
+└──────────────┬──────────────────────┘
+               │
+┌──────────────▼──────────────────────┐
+│         Procedural Memory           │
+│   skills, how-tos, patterns         │
+│   "how to do things" — executable   │
+└─────────────────────────────────────┘
+```
+
+### Implementation ideas
+- Memory stored as markdown files (like Claude Code's memory system)
+- Agent can read/write/search memories via tools
+- Auto-summarize conversations on session end
+- Relevance-based retrieval: embed + search, or keyword matching
+- Keep it file-based — no vector DB dependency for now
+
+---
+
+## 5. Identity and Soul
+
+Current state: single `prompt.md` file defines everything.
+
+### Proposed split
+```
+identity/
+├── identity.md      # Who is Semillita? Name, personality, values, voice.
+├── purpose.md       # What is her mission? What does she care about?
+├── boundaries.md    # What she won't do. Safety, ethics, limits.
+└── style.md         # How she communicates. Tone, language, formatting.
+```
+
+### Design principles
+- Minimal. Not 20 files — 3 or 4 at most.
+- The agent can read these but not modify them (protected paths).
+- Each file is self-contained and independent.
+- Inspired by but simpler than OpenAI's "soul" pattern. No corporate bloat.
+
+---
+
+## 6. Skills System
+
+Tools are code (Python functions). Skills are knowledge (markdown instructions on how to use tools effectively).
+
+### Structure
+```
+skills/
+├── browser.md       # How to use browser tool: navigation patterns, waiting, error recovery
+├── computer.md      # How to use computer tool: click targets, screenshot-verify loops
+├── coding.md        # How to write and test code: patterns, languages, debugging
+├── research.md      # How to search and synthesize information from the web
+└── communication.md # How to talk to humans: tone, clarity, when to ask vs act
+```
+
+### How it works
+- Skills are loaded into system prompt (or injected on demand)
+- Agent can create new skills (`tools/` pattern but for `skills/`)
+- Skills reference tools: "when you need to click a button, use the computer tool with action=click"
+- Skills are living documents — agent can improve them over time
+
+---
+
+## 7. Multi-Agent System
+
+Current state: one agent, one loop, one session.
+
+### Vision
+Multiple specialized agents that can communicate and delegate.
+
+### Architecture options
+
+**Option A: Orchestrator pattern**
+```
+User → Orchestrator Agent → delegates to:
+  ├── Research Agent (web search, reading)
+  ├── Coding Agent (bash, files)
+  ├── Browser Agent (web automation)
+  └── Creative Agent (writing, images)
+```
+
+**Option B: Peer network**
+```
+Agent A ←→ Agent B ←→ Agent C
+  Each has own session, tools, identity
+  Communicate via message passing (/inject to each other)
+```
+
+### Implementation ideas
+- Each agent is a separate `loop.py` instance with its own session and registry
+- Agents communicate via the existing `/message` and `/inject` endpoints
+- Shared memory layer for coordination
+- Start with Option A (simpler) — one orchestrator that spawns sub-loops
+
+---
+
+## 8. ElevenLabs Audio
+
+Voice synthesis for Semillita's responses.
+
+- [ ] `core_tools/speak.py` — send text to ElevenLabs, save audio to `data/artifacts/`
+- [ ] Voice selection and configuration
+- [ ] Streaming audio (play while generating)
+- [ ] Integration with gateway (voice messages on WhatsApp/Telegram)
+
+---
+
+## 9. MCP (Model Context Protocol)
+
+Two directions:
+
+### MCP Server (others connect to Semillita)
+- Expose Semillita's tools and capabilities via MCP
+- External agents or applications can use Semillita as a tool provider
+- Already have the FastAPI endpoints — MCP is a protocol wrapper
+
+### MCP Client (Semillita connects to external services)
+- Connect to external MCP servers (databases, APIs, specialized tools)
+- Agent discovers and uses external tools dynamically
+- Extends Semillita's capabilities without writing custom tools
+
+---
+
+## 10. CLI Improvements
+
+- [ ] Persistent color scheme (save to `data/.colors`)
+- [ ] `/history` command to browse past conversations
+- [ ] `/clear` command to start fresh session
+- [ ] `/tools` command to list available tools
+- [ ] `/status` command showing model, tokens used, uptime
+- [ ] Tab completion for commands
+- [ ] Markdown rendering in responses (bold, lists, code blocks)
+
+---
+
+## 11. API Completeness
+
+Ensure all agent capabilities are accessible via HTTP:
+
+- [x] POST /message — send message
+- [x] POST /inject — inject mid-loop
+- [x] POST /interrupt — stop current work
+- [x] POST /model — switch model
+- [x] GET /status — current state
+- [x] GET /tools — list tools
+- [x] GET /history — conversation history
+- [ ] POST /clear — clear session
+- [ ] GET /models — list available models
+- [ ] POST /config — update config
+- [ ] GET /memory — list memories
+- [ ] POST /memory — create memory
+- [ ] WebSocket /stream — event stream (exists)
+
+---
+
+## Priority Order
+
+1. **Fix what's broken** — browser, max_tokens, validations
+2. **Browser and computer use** — most impactful for agent capability
+3. **Memory system** — enables learning and continuity
+4. **Identity split** — cleaner soul definition
+5. **Skills system** — agent knows how to use her own tools
+6. **Gateway** — connects to the world
+7. **ElevenLabs** — voice
+8. **Multi-agent** — scaling
+9. **MCP** — interoperability
+10. **CLI + API polish** — ongoing
