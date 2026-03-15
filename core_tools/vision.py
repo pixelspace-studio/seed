@@ -9,34 +9,36 @@ from pathlib import Path
 
 from config import config
 
-ARTIFACTS_DIR = os.path.join(config.seed_dir, "data", "artifacts")
+MODELS_PATH = os.path.join(config.seed_dir, "models.json")
 
 
-def _find_latest_screenshot():
-    """Find the most recent screenshot in artifacts."""
-    artifacts = Path(ARTIFACTS_DIR)
-    if not artifacts.exists():
-        return None
-    screenshots = sorted(
-        list(artifacts.glob("screenshot-*.png"))
-        + list(artifacts.glob("screen-*.png"))
-        + list(artifacts.glob("browser-*.png"))
-        + list(artifacts.glob("pw-*.png")),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
-    )
-    return str(screenshots[0]) if screenshots else None
+def _load_models():
+    with open(MODELS_PATH, "r") as f:
+        return json.load(f)
 
 
-def _detect_provider(model):
-    """Detect AI provider from model name."""
-    if model.startswith("claude"):
-        return "anthropic"
-    elif model.startswith("gpt") or model.startswith("o1") or model.startswith("o3"):
-        return "openai"
-    elif model.startswith("gemini"):
-        return "google"
-    return "anthropic"  # default
+def _get_vision_model():
+    """Get the current model if it supports vision, or find one that does."""
+    models = _load_models()
+    current = config.model
+
+    # Current model supports vision? Use it.
+    if current in models and "vision" in models[current].get("capabilities", []):
+        info = models[current]
+        return current, info["provider"]
+
+    # Find any model that supports vision, prefer same provider
+    current_provider = models.get(current, {}).get("provider")
+    for mid, m in models.items():
+        if "vision" in m.get("capabilities", []) and m["provider"] == current_provider:
+            return mid, m["provider"]
+
+    # Any vision model
+    for mid, m in models.items():
+        if "vision" in m.get("capabilities", []):
+            return mid, m["provider"]
+
+    return None, None
 
 
 def _encode_image(path):
@@ -124,11 +126,8 @@ async def execute(
     image_path: str = None,
     prompt: str = "Describe in detail what you see in this image.",
 ) -> str:
-    # Find image
     if not image_path:
-        image_path = _find_latest_screenshot()
-        if not image_path:
-            return "Error: no screenshots found. Take one first."
+        return "Error: image_path is required. Take a screenshot first, then pass the path."
 
     if not os.path.isabs(image_path):
         image_path = os.path.join(config.working_dir, image_path)
@@ -136,29 +135,31 @@ async def execute(
     if not os.path.exists(image_path):
         return f"Error: file not found: {image_path}"
 
+    # Find a vision-capable model
+    vision_model, provider = _get_vision_model()
+    if not vision_model:
+        return "Error: no vision-capable model available in models.json"
+
     # Encode
     image_data, media_type = _encode_image(image_path)
-
-    # Detect provider from current model
-    provider = _detect_provider(config.model)
 
     try:
         if provider == "anthropic":
             api_key = config.anthropic_api_key
             if not api_key:
                 return "Error: ANTHROPIC_API_KEY not set"
-            analysis = await _call_anthropic(image_data, media_type, prompt, api_key, config.model)
+            analysis = await _call_anthropic(image_data, media_type, prompt, api_key, vision_model)
 
         elif provider == "openai":
             api_key = config.openai_api_key
             if not api_key:
                 return "Error: OPENAI_API_KEY not set"
-            analysis = await _call_openai(image_data, media_type, prompt, api_key, config.model)
+            analysis = await _call_openai(image_data, media_type, prompt, api_key, vision_model)
 
         else:
             return f"Error: vision not supported for provider '{provider}' yet"
 
-        return f"Image: {image_path}\n\n{analysis}"
+        return f"Image: {image_path}\nModel: {vision_model}\n\n{analysis}"
 
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8")[:300]
@@ -171,7 +172,7 @@ tool = {
     "name": "vision",
     "description": (
         "Analyze an image using AI vision. Uses the current model's provider "
-        "(Anthropic or OpenAI). If no image path is given, analyzes the most recent screenshot. "
+        "(Anthropic or OpenAI). Requires an image_path — take a screenshot first if needed. "
         "Use this to understand what's on screen, read text from images, or analyze visual content."
     ),
     "parameters": {

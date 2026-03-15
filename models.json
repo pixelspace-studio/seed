@@ -1,0 +1,56 @@
+{
+  "claude-sonnet-4-6": {
+    "provider": "anthropic",
+    "name": "Claude Sonnet 4.6",
+    "context": 200000,
+    "capabilities": ["text", "vision"]
+  },
+  "claude-opus-4-6": {
+    "provider": "anthropic",
+    "name": "Claude Opus 4.6",
+    "context": 1000000,
+    "capabilities": ["text", "vision"]
+  },
+  "claude-haiku-4-5-20251001": {
+    "provider": "anthropic",
+    "name": "Claude Haiku 4.5",
+    "context": 200000,
+    "capabilities": ["text", "vision"]
+  },
+  "gpt-5.4": {
+    "provider": "openai",
+    "name": "GPT-5.4",
+    "context": 128000,
+    "capabilities": ["text", "vision"]
+  },
+  "gemini-2.5-pro": {
+    "provider": "google",
+    "name": "Gemini 2.5 Pro",
+    "context": 1000000,
+    "capabilities": ["text", "vision", "image_gen"]
+  },
+  "gemini-2.5-flash": {
+    "provider": "google",
+    "name": "Gemini 2.5 Flash",
+    "context": 1000000,
+    "capabilities": ["text", "vision", "image_gen"]
+  },
+  "dall-e-3": {
+    "provider": "openai",
+    "name": "DALL-E 3",
+    "context": null,
+    "capabilities": ["image_gen"]
+  },
+  "imagen-3": {
+    "provider": "google",
+    "name": "Imagen 3",
+    "context": null,
+    "capabilities": ["image_gen"]
+  },
+  "whisper-1": {
+    "provider": "openai",
+    "name": "Whisper 1",
+    "context": null,
+    "capabilities": ["speech_to_text"]
+  }
+}
