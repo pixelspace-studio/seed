@@ -13,8 +13,12 @@ import httpx
 BASE_URL = "http://localhost:9999"
 WS_URL = "ws://localhost:9999/stream"
 
-# Semillita's voice color (hex, default hot pink)
-_response_color = "A3F7FF"
+# Color scheme (hex)
+_colors = {
+    "system": "6B7280",  # cool gray
+    "seed": "A3F7FF",    # electric cyan
+    "user": "C4B5FD",    # soft lavender
+}
 
 
 def _wordwrap(text: str) -> str:
@@ -32,12 +36,17 @@ def _wordwrap(text: str) -> str:
     return "\n".join(wrapped)
 
 
-def _colorize(text: str) -> str:
-    """Word-wrap and colorize text for display."""
-    text = _wordwrap(text)
-    h = _response_color.lstrip("#")
+def _hex_to_ansi(hex_color: str, text: str) -> str:
+    """Wrap text in 24-bit ANSI color from hex."""
+    h = hex_color.lstrip("#")
     r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
     return f"\033[38;2;{r};{g};{b}m{text}\033[0m"
+
+
+def _colorize(text: str, role: str = "seed") -> str:
+    """Word-wrap and colorize text for display."""
+    text = _wordwrap(text)
+    return _hex_to_ansi(_colors.get(role, _colors["seed"]), text)
 
 
 def start():
@@ -52,25 +61,26 @@ def start():
 
 def _format_event(data: dict) -> str | None:
     """Format a WebSocket event for display. Returns None to skip."""
+    s = lambda txt: _hex_to_ansi(_colors["system"], txt)
     t = data.get("type", "?")
     if t == "tool_call":
         args_str = json.dumps(data.get("args", {}), ensure_ascii=False)
         if len(args_str) > 120:
             args_str = args_str[:120] + "..."
-        return f"  \033[90m[{data['tool']}]\033[0m {args_str}"
+        return f"  {s(f'[{data["tool"]}]')} {args_str}"
     elif t == "tool_result":
         result = data.get("result", "")
         if len(result) > 200:
             result = result[:200] + "..."
-        return f"  \033[90m→ {result}\033[0m"
+        return f"  {s(f'→ {result}')}"
     elif t == "thinking":
-        return f"  \033[90mthinking... (iteration {data.get('iteration', '?')})\033[0m"
+        return f"  {s(f'thinking... (iteration {data.get("iteration", "?")})')}"
     elif t == "error":
-        return f"  \033[31merror: {data.get('message', '?')}\033[0m"
+        return f"  {_hex_to_ansi('FF6B6B', f'error: {data.get("message", "?")}')}"
     elif t in ("injected", "response_complete", "idle", "message_received", "interrupted"):
         return None
     else:
-        return f"  \033[90m[{t}]\033[0m"
+        return f"  {s(f'[{t}]')}"
 
 
 def send_message(text: str):
@@ -257,9 +267,11 @@ async def _chat_async(verbose: bool = True, model: str = None):
     # on every redraw. Combined with app.invalidate() in _refresh_prompt(),
     # the prompt updates from >> to > when Semillita finishes working.
     def _get_prompt():
-        if is_working:
-            return '>> '
-        return '> '
+        from prompt_toolkit.formatted_text import HTML
+        h = _colors["user"]
+        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+        sym = '>>' if is_working else '>'
+        return HTML(f'<style fg="#{h}">{sym} </style>')
 
     pt = PromptSession(key_bindings=kb)
 
@@ -313,7 +325,7 @@ async def _chat_async(verbose: bool = True, model: str = None):
         _version = "?"
     print(f"Semillita v{_version}")
     print("  Enter = send | Shift+Enter = newline | ESC = interrupt")
-    print("  Commands: /model, /verbose on|off, /color HEX, exit\n")
+    print("  Commands: /model, /color, /verbose on|off, exit\n")
 
     _models_json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models.json")
 
@@ -392,19 +404,35 @@ async def _chat_async(verbose: bool = True, model: str = None):
                         await _pick_model(out=_cprint)
                         continue
 
-                    # /color command
+                    # /color command — interactive or direct
                     if text.lower().startswith("/color"):
-                        global _response_color
                         parts = text.split()
-                        if len(parts) >= 2:
-                            c = parts[1].lstrip("#")
-                            if len(c) == 6 and all(ch in "0123456789abcdefABCDEF" for ch in c):
-                                _response_color = c.upper()
-                                _cprint(f"Color: {_colorize(_response_color)}")
+                        if len(parts) == 1:
+                            # Interactive: show current colors, prompt for each
+                            for role in ("system", "seed", "user"):
+                                current = _colors[role]
+                                sample = _hex_to_ansi(current, f"{role}: #{current}")
+                                _cprint(f"  {sample}")
+                            _cprint("")
+                            for role in ("system", "seed", "user"):
+                                sample = _hex_to_ansi(_colors[role], f"#{_colors[role]}")
+                                choice = input(f"  {role} [{sample}\033[0m]: ").strip().lstrip("#")
+                                if choice and len(choice) == 6 and all(ch in "0123456789abcdefABCDEF" for ch in choice):
+                                    _colors[role] = choice.upper()
+                            _cprint("")
+                            for role in ("system", "seed", "user"):
+                                _cprint(f"  {_hex_to_ansi(_colors[role], f'{role}: #{_colors[role]}')}")
+                        elif len(parts) == 3:
+                            # Direct: /color seed FF005A
+                            role = parts[1].lower()
+                            c = parts[2].lstrip("#")
+                            if role in _colors and len(c) == 6 and all(ch in "0123456789abcdefABCDEF" for ch in c):
+                                _colors[role] = c.upper()
+                                _cprint(f"  {_hex_to_ansi(_colors[role], f'{role}: #{_colors[role]}')}")
                             else:
-                                _cprint("Invalid hex color. Use: /color FF005A")
+                                _cprint("  Usage: /color seed FF005A")
                         else:
-                            _cprint(f"Color: {_colorize(_response_color)}")
+                            _cprint("  Usage: /color or /color <system|seed|user> HEX")
                         continue
 
                     if is_working:
@@ -423,7 +451,7 @@ async def _chat_async(verbose: bool = True, model: str = None):
                     _ctrl_c_count += 1
                     if _ctrl_c_count >= 2:
                         break
-                    _cprint("  \033[90mCtrl+C again to exit\033[0m")
+                    _cprint(f"  {_hex_to_ansi(_colors['system'], 'Ctrl+C again to exit')}")
                     continue
                 except EOFError:
                     break
