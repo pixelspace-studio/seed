@@ -23,19 +23,19 @@
     "context": 128000,
     "capabilities": ["text", "vision"]
   },
-  "gemini-3.1-pro-preview": {
+  "gemini-3.1-pro": {
     "provider": "google",
     "name": "Gemini 3.1 Pro",
     "context": 1048576,
     "capabilities": ["text", "vision"]
   },
-  "gemini-3-flash-preview": {
+  "gemini-3-flash": {
     "provider": "google",
     "name": "Gemini 3 Flash",
     "context": 1048576,
     "capabilities": ["text", "vision"]
   },
-  "gemini-3.1-flash-lite-preview": {
+  "gemini-3.1-flash-lite": {
     "provider": "google",
     "name": "Gemini 3.1 Flash-Lite",
     "context": 1048576,
@@ -47,13 +47,13 @@
     "context": null,
     "capabilities": ["image_gen"]
   },
-  "gemini-3.1-flash-image-preview": {
+  "gemini-3.1-flash-image": {
     "provider": "google",
     "name": "Nano Banana 2",
     "context": 128000,
     "capabilities": ["image_gen"]
   },
-  "gemini-3-pro-image-preview": {
+  "gemini-3-pro-image": {
     "provider": "google",
     "name": "Nano Banana Pro",
     "context": 65000,

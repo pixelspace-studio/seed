@@ -13,9 +13,9 @@ ALIASES = {
     "opus": "claude-opus-4-6",
     "haiku": "claude-haiku-4-5-20251001",
     "gpt": "gpt-5.4",
-    "gemini": "gemini-3.1-pro-preview",
-    "flash": "gemini-3-flash-preview",
-    "lite": "gemini-3.1-flash-lite-preview",
+    "gemini": "gemini-3.1-pro",
+    "flash": "gemini-3-flash",
+    "lite": "gemini-3.1-flash-lite",
 }
 
 
