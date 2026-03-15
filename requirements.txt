@@ -9,3 +9,4 @@ pyautogui
 Pillow
 python-dotenv
 pydantic
+prompt-toolkit

@@ -22,6 +22,7 @@ session = Session(data_dir="data")
 registry = Registry(seed_dir=config.seed_dir)
 status = {"state": "idle"}
 interrupt_event = asyncio.Event()
+inject_queue = asyncio.Queue()
 
 
 # --- WebSocket broadcast ---
@@ -85,6 +86,12 @@ class MessageResponse(BaseModel):
 # --- Endpoints ---
 @app.post("/message", response_model=MessageResponse)
 async def post_message(req: MessageRequest):
+    # Drain stale injected messages from previous runs
+    while not inject_queue.empty():
+        try:
+            inject_queue.get_nowait()
+        except asyncio.QueueEmpty:
+            break
     status["state"] = "working"
     interrupt_event.clear()
     try:
@@ -95,6 +102,7 @@ async def post_message(req: MessageRequest):
             registry=registry,
             event_sink=event_sink,
             interrupt=interrupt_event,
+            inject_queue=inject_queue,
         )
         return MessageResponse(response=result)
     except Exception as e:
@@ -120,6 +128,15 @@ async def get_tools():
 @app.get("/history")
 async def get_history():
     return session.load()
+
+
+@app.post("/inject")
+async def post_inject(req: MessageRequest):
+    if status["state"] != "working":
+        return {"ok": False, "error": "Not working. Use /message instead."}
+    await inject_queue.put({"text": req.text, "source": req.source})
+    await manager.broadcast({"type": "injected", "text": req.text})
+    return {"ok": True}
 
 
 @app.post("/interrupt")

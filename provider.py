@@ -23,70 +23,67 @@ class ProviderResponse:
     usage: dict = field(default_factory=dict)
 
 
-def _sanitize_messages(messages):
-    """Fix orphaned tool_use/tool_result pairs anywhere in the message history.
+def _validate_api_messages(api_messages):
+    """Fix orphaned tool_use/tool_result in already-converted API messages.
 
-    Anthropic requires:
-    - Every tool_use must have a tool_result immediately after
-    - Every tool_result must reference a tool_use in the previous message
-
-    This function handles both cases by collecting all IDs and patching gaps.
+    Operates on the exact format Anthropic receives, so nothing slips through.
     """
-    # Collect all tool_use IDs and all tool_result IDs
+    # Step 1: Collect all tool_use IDs and tool_result IDs
     tool_use_ids = set()
     tool_result_ids = set()
-    for msg in messages:
-        if msg.get("role") == "assistant":
-            for tc in msg.get("tool_calls", []):
-                tool_use_ids.add(tc["id"])
-        elif msg.get("role") == "tool_result":
-            tool_result_ids.add(msg.get("tool_use_id"))
+    for msg in api_messages:
+        if not isinstance(msg.get("content"), list):
+            continue
+        for block in msg["content"]:
+            if block.get("type") == "tool_use":
+                tool_use_ids.add(block["id"])
+            elif block.get("type") == "tool_result":
+                tool_result_ids.add(block["tool_use_id"])
 
-    # Find orphaned tool_uses (no matching tool_result)
+    # Step 2: Find orphans
     orphaned_uses = tool_use_ids - tool_result_ids
-    # Find orphaned tool_results (no matching tool_use)
     orphaned_results = tool_result_ids - tool_use_ids
 
     if not orphaned_uses and not orphaned_results:
-        return messages
+        return api_messages
 
-    log.warning(f"Sanitizing messages: {len(orphaned_uses)} orphaned tool_uses, {len(orphaned_results)} orphaned tool_results")
+    log.warning(
+        "Validating API messages: %d orphaned tool_use, %d orphaned tool_result",
+        len(orphaned_uses), len(orphaned_results),
+    )
 
+    # Step 3: Strip orphaned blocks
     cleaned = []
-    for msg in messages:
-        role = msg.get("role", "user")
-
-        if role == "tool_result" and msg.get("tool_use_id") in orphaned_results:
-            # Drop tool_results with no matching tool_use
+    for msg in api_messages:
+        if not isinstance(msg.get("content"), list):
+            cleaned.append(msg)
             continue
 
-        if role == "assistant" and msg.get("tool_calls"):
-            # Check if ALL tool_calls in this message are orphaned
-            msg_tc_ids = {tc["id"] for tc in msg.get("tool_calls", [])}
-            if msg_tc_ids.issubset(orphaned_uses):
-                # Every tool_call is orphaned — keep only the text content
-                if msg.get("content"):
-                    cleaned.append({"role": "assistant", "content": msg["content"]})
+        new_blocks = []
+        for block in msg["content"]:
+            if block.get("type") == "tool_use" and block["id"] in orphaned_uses:
                 continue
-            elif msg_tc_ids & orphaned_uses:
-                # Some tool_calls are orphaned — remove only those
-                good_tcs = [tc for tc in msg["tool_calls"] if tc["id"] not in orphaned_uses]
-                new_msg = dict(msg)
-                new_msg["tool_calls"] = good_tcs
-                cleaned.append(new_msg)
+            if block.get("type") == "tool_result" and block["tool_use_id"] in orphaned_results:
                 continue
+            new_blocks.append(block)
 
-        cleaned.append(msg)
+        if new_blocks:
+            cleaned.append({**msg, "content": new_blocks})
+        # else: drop empty message entirely
 
-    # Strip leading tool_results or assistant+tool_calls from the start
-    while cleaned and cleaned[0].get("role") == "tool_result":
-        cleaned = cleaned[1:]
-    if cleaned and cleaned[0].get("role") == "assistant" and cleaned[0].get("tool_calls"):
-        cleaned = cleaned[1:]
-        while cleaned and cleaned[0].get("role") == "tool_result":
-            cleaned = cleaned[1:]
+    # Step 4: Merge consecutive same-role messages
+    merged = []
+    for msg in cleaned:
+        if merged and merged[-1]["role"] == msg["role"]:
+            prev = merged[-1]
+            # Normalize both to list-of-blocks
+            prev_content = prev["content"] if isinstance(prev["content"], list) else [{"type": "text", "text": prev["content"]}]
+            cur_content = msg["content"] if isinstance(msg["content"], list) else [{"type": "text", "text": msg["content"]}]
+            merged[-1] = {**prev, "content": prev_content + cur_content}
+        else:
+            merged.append(msg)
 
-    return cleaned
+    return merged
 
 
 async def send(
@@ -107,11 +104,6 @@ async def send(
             "description": t["description"],
             "input_schema": t["parameters"],
         })
-
-    # Sanitize messages: fix orphaned tool_use/tool_result pairs anywhere in history.
-    # This can happen when a session is interrupted mid-tool-call, context is truncated,
-    # or the user sends input that breaks a tool exchange.
-    messages = _sanitize_messages(messages)
 
     # Convert messages to Anthropic format
     api_messages = []
@@ -141,6 +133,10 @@ async def send(
                 api_messages.append({"role": "assistant", "content": content_blocks})
         else:
             api_messages.append({"role": "user", "content": msg.get("content", "")})
+
+    # Validate: fix orphaned tool_use/tool_result pairs in the final API format.
+    # This self-heals corrupted history from interrupted sessions or truncated context.
+    api_messages = _validate_api_messages(api_messages)
 
     # Ensure first message is from user (Anthropic requirement)
     if api_messages and api_messages[0].get("role") != "user":

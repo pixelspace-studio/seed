@@ -17,6 +17,7 @@ async def run(
     registry: Registry,
     event_sink: Callable = None,
     interrupt: asyncio.Event = None,
+    inject_queue: asyncio.Queue = None,
 ) -> str:
     """Run the agent loop for a single message. Returns final response text."""
 
@@ -45,6 +46,27 @@ async def run(
         if interrupt and interrupt.is_set():
             emit({"type": "interrupted"})
             return "[interrupted]"
+
+        # Drain injected messages from queue
+        if inject_queue:
+            while not inject_queue.empty():
+                try:
+                    injected = inject_queue.get_nowait()
+                    inject_msg = {
+                        "role": "user",
+                        "content": injected["text"],
+                        "source": injected.get("source", "human"),
+                    }
+                    messages.append(inject_msg)
+                    session.append(inject_msg)
+                    emit({
+                        "type": "message_received",
+                        "source": inject_msg["source"],
+                        "text": injected["text"],
+                        "injected": True,
+                    })
+                except asyncio.QueueEmpty:
+                    break
 
         # Check reload flag
         reload_flag = os.path.join(config.seed_dir, "data", ".reload_flag")
@@ -91,7 +113,12 @@ async def run(
         for tc in response.tool_calls:
             emit({"type": "tool_call", "tool": tc.name, "args": tc.args})
 
-            result = await registry.execute(tc.name, tc.args)
+            try:
+                result = await registry.execute(tc.name, tc.args)
+            except (KeyboardInterrupt, asyncio.CancelledError):
+                result = "[error: interrupted]"
+            except Exception as exc:
+                result = f"[error: {exc}]"
 
             if tc.name == "respond":
                 last_respond = result
