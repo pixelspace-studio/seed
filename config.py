@@ -55,3 +55,11 @@ class Config:
 
 
 config = Config()
+
+# Load persisted model selection
+_model_file = os.path.join(config.seed_dir, "data", ".model")
+if os.path.exists(_model_file):
+    with open(_model_file) as f:
+        _saved = f.read().strip()
+    if _saved:
+        config.model = _saved

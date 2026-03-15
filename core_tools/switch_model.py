@@ -50,6 +50,11 @@ async def execute(model: str) -> str:
 
     config.model = resolved
 
+    # Persist selection
+    model_file = os.path.join(config.seed_dir, "data", ".model")
+    with open(model_file, "w") as f:
+        f.write(resolved)
+
     # Auto-adjust context window
     recommended = _recommended_context(info.get("context"))
     if recommended:
