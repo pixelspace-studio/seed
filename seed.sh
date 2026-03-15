@@ -13,13 +13,91 @@ set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$DIR"
 
+MIN_PYTHON="3.13"
+
+# Find a Python that meets the minimum version.
+# Checks specific versioned binaries first, then generic python3.
+find_python() {
+  # Build candidate list: python3.15 down to python3.13, then python3
+  candidates=""
+  for v in 15 14 13; do
+    candidates="$candidates python3.$v"
+  done
+  candidates="$candidates python3"
+
+  for cmd in $candidates; do
+    # Search in PATH
+    found=$(command -v "$cmd" 2>/dev/null || true)
+    if [ -z "$found" ]; then
+      # Also check common install locations not always in PATH
+      for dir in /opt/homebrew/bin /usr/local/bin /usr/bin; do
+        if [ -x "$dir/$cmd" ]; then
+          found="$dir/$cmd"
+          break
+        fi
+      done
+    fi
+    if [ -n "$found" ]; then
+      # Check version meets minimum
+      ver=$("$found" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null || true)
+      if [ -n "$ver" ]; then
+        major=$(echo "$ver" | cut -d. -f1)
+        minor=$(echo "$ver" | cut -d. -f2)
+        min_major=$(echo "$MIN_PYTHON" | cut -d. -f1)
+        min_minor=$(echo "$MIN_PYTHON" | cut -d. -f2)
+        if [ "$major" -gt "$min_major" ] || { [ "$major" -eq "$min_major" ] && [ "$minor" -ge "$min_minor" ]; }; then
+          echo "$found"
+          return 0
+        fi
+      fi
+    fi
+  done
+  return 1
+}
+
 case "${1:-help}" in
   install)
     echo ""
     echo "  Installing Seed..."
     echo ""
-    python3 -m venv .venv
-    .venv/bin/pip install -q -r requirements.txt
+
+    PYTHON=$(find_python || true)
+    if [ -z "$PYTHON" ]; then
+      echo "  Python $MIN_PYTHON+ not found on this system."
+      echo ""
+      printf "  Install Python via Homebrew? [Y/n]: "
+      read -r answer
+      if [ "$answer" = "n" ] || [ "$answer" = "N" ]; then
+        echo ""
+        echo "  Seed requires Python $MIN_PYTHON+."
+        echo "  Install it however you prefer, then run ./seed.sh install again."
+        echo ""
+        exit 1
+      fi
+      echo ""
+      echo "  Installing Python via Homebrew..."
+      if ! command -v brew &>/dev/null; then
+        echo "  Homebrew not found. Installing Homebrew first..."
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        # Add Homebrew to PATH for this session
+        eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null || /usr/local/bin/brew shellenv 2>/dev/null)"
+      fi
+      brew install python
+      echo ""
+      PYTHON=$(find_python || true)
+      if [ -z "$PYTHON" ]; then
+        echo "  Python install succeeded but couldn't find Python $MIN_PYTHON+."
+        echo "  Try opening a new terminal and running ./seed.sh install again."
+        exit 1
+      fi
+    fi
+
+    PY_VER=$("$PYTHON" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+    echo "  Found Python $PY_VER at $PYTHON"
+    echo ""
+
+    "$PYTHON" -m venv .venv
+    .venv/bin/pip install -r requirements.txt
     .venv/bin/playwright install chrome 2>/dev/null
     if [ ! -f .env ]; then
       cp .env.example .env
