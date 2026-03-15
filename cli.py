@@ -187,22 +187,33 @@ async def _chat_async(verbose: bool = True):
     from prompt_toolkit.application import get_app_or_none
     import websockets
 
-    # Activate Kitty keyboard protocol so terminal sends distinct
-    # escape sequences for Shift+Enter, Ctrl+Enter, etc.
+    # --- Kitty keyboard protocol ---
+    # Traditional terminals can't distinguish Shift+Enter from Enter (both send 0x0D).
+    # The Kitty protocol (ESC[>1u) tells the terminal to send distinct escape sequences:
+    #   Enter       -> ESC[13u
+    #   Shift+Enter -> ESC[13;2u  (modifier bitmask: shift=1, value=1+1=2)
+    # Supported: iTerm2, Kitty, Ghostty, WezTerm, Alacritty.
+    # NOT supported: macOS Terminal.app (fallback: Esc+Enter for newline).
+    # Must deactivate on exit with ESC[<u or the terminal stays in Kitty mode.
+    # Ref: https://blog.fsck.com/releases/2026/02/26/terminal-keyboard-protocol/
     sys.stdout.write("\x1b[>1u")
     sys.stdout.flush()
 
-    # Remap Shift+Enter to F24 (unused) so we can bind it separately from Enter.
-    # xterm "modifyOtherKeys" encoding:
-    ANSI_SEQUENCES["\x1b[27;2;13~"] = Keys.F24
-    # Kitty protocol / CSI u encoding:
-    ANSI_SEQUENCES["\x1b[13;2u"] = Keys.F24
+    # prompt_toolkit maps Shift+Enter to Keys.ControlM (= Enter) by default.
+    # We remap both known encodings to Keys.F24 (unused key) so we can bind it.
+    ANSI_SEQUENCES["\x1b[27;2;13~"] = Keys.F24   # xterm modifyOtherKeys encoding
+    ANSI_SEQUENCES["\x1b[13;2u"] = Keys.F24       # Kitty CSI u encoding
 
     is_working = False
     client = httpx.AsyncClient(base_url=BASE_URL, timeout=300)
 
     def _cprint(text):
-        """Print colored text properly through prompt_toolkit's renderer."""
+        """Print colored text through prompt_toolkit's renderer.
+
+        Regular print() inside patch_stdout() mangles ESC bytes (shows as ?[).
+        print_formatted_text(ANSI(...)) routes output through prompt_toolkit's
+        own VT100 renderer, which handles escape sequences correctly.
+        """
         ptprint(ANSI(text))
 
     def _refresh_prompt():
@@ -225,11 +236,13 @@ async def _chat_async(verbose: bool = True):
         except Exception:
             pass
 
-    # Dynamic prompt: updates automatically when is_working changes
+    # Dynamic prompt: prompt_async() accepts a callable, so it re-evaluates
+    # on every redraw. Combined with app.invalidate() in _refresh_prompt(),
+    # the prompt updates from >> to > when Semillita finishes working.
     def _get_prompt():
         if is_working:
-            return ANSI('\033[33minject>\033[0m ')
-        return 'you> '
+            return ANSI('\033[33m>>\033[0m ')
+        return '> '
 
     pt = PromptSession(key_bindings=kb)
 
