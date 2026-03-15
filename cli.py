@@ -50,10 +50,7 @@ def _format_event(data: dict) -> str | None:
         return f"  \033[90mthinking... (iteration {data.get('iteration', '?')})\033[0m"
     elif t == "error":
         return f"  \033[31merror: {data.get('message', '?')}\033[0m"
-    elif t == "injected":
-        text = data.get("text", "")[:60]
-        return f"  \033[33m[injected]\033[0m {text}"
-    elif t in ("response_complete", "idle", "message_received", "interrupted"):
+    elif t in ("injected", "response_complete", "idle", "message_received", "interrupted"):
         return None
     else:
         return f"  \033[90m[{t}]\033[0m"
