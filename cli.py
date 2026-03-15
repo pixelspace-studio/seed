@@ -205,6 +205,7 @@ async def _chat_async(verbose: bool = True):
     ANSI_SEQUENCES["\x1b[99;5u"] = Keys.ControlC
 
     is_working = False
+    _ctrl_c_count = 0  # two Ctrl+C when idle = exit
     client = httpx.AsyncClient(base_url=BASE_URL, timeout=300)
 
     def _cprint(text):
@@ -303,6 +304,7 @@ async def _chat_async(verbose: bool = True):
                     text = await pt.prompt_async(_get_prompt)
                     text = text.strip()
 
+                    _ctrl_c_count = 0
                     if not text:
                         continue
                     if text.lower() == "exit":
@@ -344,8 +346,10 @@ async def _chat_async(verbose: bool = True):
                         await asyncio.sleep(0.05)
 
                 except KeyboardInterrupt:
-                    if is_working:
-                        await _send_interrupt()
+                    _ctrl_c_count += 1
+                    if _ctrl_c_count >= 2:
+                        break
+                    _cprint("  \033[90mCtrl+C again to exit\033[0m")
                     continue
                 except EOFError:
                     break

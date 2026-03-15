@@ -89,33 +89,34 @@ async def run(
         # No tool calls → check for injected messages before returning.
         # User may have typed while provider_send() was blocking.
         if not response.tool_calls:
-            has_injected = False
+            injected_msgs = []
             if inject_queue and not inject_queue.empty():
                 while not inject_queue.empty():
                     try:
                         injected = inject_queue.get_nowait()
-                        inject_msg = {
-                            "role": "user",
-                            "content": injected["text"],
-                            "source": injected.get("source", "human"),
-                        }
-                        messages.append(inject_msg)
-                        session.append(inject_msg)
-                        emit({
-                            "type": "message_received",
-                            "source": inject_msg["source"],
-                            "text": injected["text"],
-                            "injected": True,
-                        })
-                        has_injected = True
+                        injected_msgs.append(injected)
                     except asyncio.QueueEmpty:
                         break
-            if has_injected:
-                # Don't return yet — save the response and loop again
-                # so the model sees the injected messages.
+            if injected_msgs:
+                # Save assistant response first, then append injected user
+                # messages so the conversation ends with a user message.
                 assistant_msg = {"role": "assistant", "content": response.content}
                 messages.append(assistant_msg)
                 session.append(assistant_msg)
+                for injected in injected_msgs:
+                    inject_msg = {
+                        "role": "user",
+                        "content": injected["text"],
+                        "source": injected.get("source", "human"),
+                    }
+                    messages.append(inject_msg)
+                    session.append(inject_msg)
+                    emit({
+                        "type": "message_received",
+                        "source": inject_msg["source"],
+                        "text": injected["text"],
+                        "injected": True,
+                    })
                 continue
 
             text = response.content
