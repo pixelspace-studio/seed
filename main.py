@@ -117,7 +117,7 @@ async def post_message(req: MessageRequest):
 
 @app.get("/status")
 async def get_status():
-    return status
+    return {**status, "model": config.model}
 
 
 @app.get("/tools")

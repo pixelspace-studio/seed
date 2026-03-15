@@ -301,9 +301,35 @@ async def _chat_async(verbose: bool = True, model: str = None):
     # Switch model if requested via --model flag
     if model:
         try:
-            r = await client.post("/model", json={"text": model}, timeout=5)
-            r.raise_for_status()
-            print(f"  {r.json().get('result', '')}\n")
+            if model == "__pick__":
+                # Interactive picker
+                r = await client.get("/status", timeout=5)
+                current = r.json().get("model", "?")
+                with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "models.json")) as mf:
+                    all_models = json.load(mf)
+                text_models = [
+                    (mid, m["name"]) for mid, m in all_models.items()
+                    if "text" in m.get("capabilities", [])
+                ]
+                print("  Models:")
+                for i, (mid, name) in enumerate(text_models, 1):
+                    marker = " *" if mid == current else ""
+                    print(f"    {i}. {name}{marker}")
+                print()
+                choice = input("  Pick a number (enter to keep current): ").strip()
+                if choice and choice.isdigit():
+                    idx = int(choice) - 1
+                    if 0 <= idx < len(text_models):
+                        model = text_models[idx][0]
+                    else:
+                        print("  Invalid choice.\n")
+                        model = None
+                else:
+                    model = None
+            if model and model != "__pick__":
+                r = await client.post("/model", json={"text": model}, timeout=5)
+                r.raise_for_status()
+                print(f"  {r.json().get('result', '')}\n")
         except httpx.ConnectError:
             print("  Error: Semillita is not running. Use 'seed start' first.")
             return
@@ -385,16 +411,13 @@ async def _chat_async(verbose: bool = True, model: str = None):
 
 def main():
     parser = argparse.ArgumentParser(prog="seed", description="Semillita CLI")
-    parser.add_argument("command", nargs="?", default="chat",
-                        help="start | status | stop | watch | chat | or a message to send")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Show tool calls and events in real-time")
-    parser.add_argument("-m", "--model", type=str, default=None,
-                        help="Model to use (e.g. sonnet, opus, gemini-3.1-pro)")
-    parser.add_argument("rest", nargs="*", help=argparse.SUPPRESS)
-    args = parser.parse_args()
+    parser.add_argument("-m", "--model", nargs="?", const="__pick__", default=None,
+                        help="Model to use, or pass without value to pick interactively")
+    args, positional = parser.parse_known_args()
 
-    cmd = args.command
+    cmd = positional[0] if positional else "chat"
     if cmd == "start":
         start()
     elif cmd == "status":
@@ -406,7 +429,7 @@ def main():
     elif cmd == "chat":
         chat(verbose=True, model=args.model)
     else:
-        full_message = " ".join([cmd] + args.rest)
+        full_message = " ".join(positional)
         if args.verbose:
             send_message_verbose(full_message)
         else:

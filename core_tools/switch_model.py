@@ -7,16 +7,6 @@ from config import config
 
 MODELS_PATH = os.path.join(config.seed_dir, "models.json")
 
-# Shorthand aliases
-ALIASES = {
-    "sonnet": "claude-sonnet-4-6",
-    "opus": "claude-opus-4-6",
-    "haiku": "claude-haiku-4-5-20251001",
-    "gpt": "gpt-5.4",
-    "gemini": "gemini-3.1-pro",
-    "flash": "gemini-3-flash",
-    "lite": "gemini-3.1-flash-lite",
-}
 
 
 def _load_models():
@@ -34,9 +24,7 @@ def _recommended_context(context_window):
 async def execute(model: str) -> str:
     models = _load_models()
 
-    # Resolve alias or direct model ID
-    key = model.lower().strip()
-    resolved = ALIASES.get(key, key)
+    resolved = model.strip()
 
     if resolved not in models:
         text_models = [
@@ -78,10 +66,7 @@ tool = {
     "name": "switch_model",
     "description": (
         "Switch the active AI model. Only accepts models with text capability. "
-        "Use this when a task needs more capability (opus), speed (haiku/flash), "
-        "or when the user requests a model change. "
-        "Shortcuts: sonnet, opus, haiku, gpt, gemini, flash. "
-        "Or use full model IDs from models.json."
+        "Use full model IDs from models.json (e.g. claude-sonnet-4-6, gemini-3-flash)."
     ),
     "parameters": {
         "type": "object",
