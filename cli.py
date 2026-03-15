@@ -185,14 +185,8 @@ async def _chat_async(verbose: bool = True):
     import websockets
 
     # --- Kitty keyboard protocol ---
-    # Traditional terminals can't distinguish Shift+Enter from Enter (both send 0x0D).
-    # The Kitty protocol (ESC[>1u) tells the terminal to send distinct escape sequences:
-    #   Enter       -> ESC[13u
-    #   Shift+Enter -> ESC[13;2u  (modifier bitmask: shift=1, value=1+1=2)
-    # Supported: iTerm2, Kitty, Ghostty, WezTerm, Alacritty.
-    # NOT supported: macOS Terminal.app (fallback: Esc+Enter for newline).
+    # Enables distinct escape sequences for modified keys (Shift+Enter, Ctrl+C, etc).
     # Must deactivate on exit with ESC[<u or the terminal stays in Kitty mode.
-    # Ref: https://blog.fsck.com/releases/2026/02/26/terminal-keyboard-protocol/
     sys.stdout.write("\x1b[>1u")
     sys.stdout.flush()
 
@@ -203,6 +197,7 @@ async def _chat_async(verbose: bool = True):
     # Kitty protocol re-encodes ALL keys including Ctrl+C (99=ascii 'c', 5=ctrl modifier).
     # Without this mapping, Ctrl+C shows as raw text "[99;5u" instead of interrupting.
     ANSI_SEQUENCES["\x1b[99;5u"] = Keys.ControlC
+    ANSI_SEQUENCES["\x1b[27u"] = Keys.Escape        # Kitty CSI u encoding for ESC
 
     is_working = False
     _ctrl_c_count = 0  # two Ctrl+C when idle = exit
@@ -227,9 +222,13 @@ async def _chat_async(verbose: bool = True):
     kb = KeyBindings()
 
     @kb.add(Keys.F24)             # Shift+Enter — newline
-    @kb.add('escape', 'enter')    # Esc+Enter (Alt+Enter) — newline fallback
     def _newline(event):
         event.current_buffer.insert_text('\n')
+
+    @kb.add('escape', eager=True)  # ESC — interrupt current work
+    def _escape(event):
+        if is_working:
+            asyncio.ensure_future(_send_interrupt())
 
     async def _send_interrupt():
         try:
@@ -290,8 +289,13 @@ async def _chat_async(verbose: bool = True):
             _refresh_prompt()
 
     # --- Main loop ---
-    print("Semillita chat")
-    print("  Enter = send | Shift+Enter = newline | Ctrl+C = stop")
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "VERSION")) as _vf:
+            _version = _vf.read().strip()
+    except Exception:
+        _version = "?"
+    print(f"Semillita v{_version}")
+    print("  Enter = send | Shift+Enter = newline | ESC = interrupt")
     print("  Commands: /verbose on|off, /color HEX, exit\n")
 
     ws_task = asyncio.create_task(ws_listener())
