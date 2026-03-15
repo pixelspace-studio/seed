@@ -164,15 +164,15 @@ def watch():
 # Async interactive chat — multiline, inject, ESC-to-interrupt
 # ---------------------------------------------------------------------------
 
-def chat(verbose: bool = True):
+def chat(verbose: bool = True, model: str = None):
     """Interactive chat loop with multiline + inject support."""
     try:
-        asyncio.run(_chat_async(verbose))
+        asyncio.run(_chat_async(verbose, model))
     except KeyboardInterrupt:
         print("\nbye.")
 
 
-async def _chat_async(verbose: bool = True):
+async def _chat_async(verbose: bool = True, model: str = None):
     """Async chat: always-active input, inject while working, ESC to stop."""
     from prompt_toolkit import PromptSession
     from prompt_toolkit import print_formatted_text as ptprint
@@ -298,6 +298,18 @@ async def _chat_async(verbose: bool = True):
     print("  Enter = send | Shift+Enter = newline | ESC = interrupt")
     print("  Commands: /verbose on|off, /color HEX, exit\n")
 
+    # Switch model if requested via --model flag
+    if model:
+        try:
+            r = await client.post("/model", json={"text": model}, timeout=5)
+            r.raise_for_status()
+            print(f"  {r.json().get('result', '')}\n")
+        except httpx.ConnectError:
+            print("  Error: Semillita is not running. Use 'seed start' first.")
+            return
+        except Exception as e:
+            print(f"  Model switch error: {e}\n")
+
     ws_task = asyncio.create_task(ws_listener())
     await asyncio.sleep(0.3)  # let WS connect
 
@@ -377,6 +389,8 @@ def main():
                         help="start | status | stop | watch | chat | or a message to send")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Show tool calls and events in real-time")
+    parser.add_argument("-m", "--model", type=str, default=None,
+                        help="Model to use (e.g. sonnet, opus, gemini-3.1-pro)")
     parser.add_argument("rest", nargs="*", help=argparse.SUPPRESS)
     args = parser.parse_args()
 
@@ -390,7 +404,7 @@ def main():
     elif cmd == "watch":
         watch()
     elif cmd == "chat":
-        chat(verbose=True)
+        chat(verbose=True, model=args.model)
     else:
         full_message = " ".join([cmd] + args.rest)
         if args.verbose:

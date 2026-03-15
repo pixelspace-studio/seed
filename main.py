@@ -139,6 +139,14 @@ async def post_inject(req: MessageRequest):
     return {"ok": True}
 
 
+@app.post("/model")
+async def post_model(req: MessageRequest):
+    """Switch model at runtime. Accepts aliases (sonnet, opus) or full IDs."""
+    from core_tools.switch_model import execute as switch_execute
+    result = await switch_execute(req.text)
+    return {"ok": True, "result": result}
+
+
 @app.post("/interrupt")
 async def post_interrupt():
     interrupt_event.set()
