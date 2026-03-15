@@ -180,7 +180,15 @@ async def _chat_async(verbose: bool = True):
     from prompt_toolkit import PromptSession
     from prompt_toolkit.key_binding import KeyBindings
     from prompt_toolkit.patch_stdout import patch_stdout
+    from prompt_toolkit.input.ansi_escape_sequences import ANSI_SEQUENCES
+    from prompt_toolkit.keys import Keys
     import websockets
+
+    # Remap Shift+Enter to F24 (unused) so we can bind it separately from Enter.
+    # xterm "modifyOtherKeys" encoding:
+    ANSI_SEQUENCES["\x1b[27;2;13~"] = Keys.F24
+    # CSI u encoding (kitty/iTerm2):
+    ANSI_SEQUENCES["\x1b[13;2u"] = Keys.F24
 
     is_working = False
     client = httpx.AsyncClient(base_url=BASE_URL, timeout=300)
@@ -188,14 +196,10 @@ async def _chat_async(verbose: bool = True):
     # --- Key bindings ---
     kb = KeyBindings()
 
-    @kb.add('s-enter')  # Shift+Enter — newline (modern terminals)
+    @kb.add(Keys.F24)             # Shift+Enter — newline
+    @kb.add('escape', 'enter')    # Esc+Enter (Alt+Enter) — newline fallback
     def _newline(event):
         event.current_buffer.insert_text('\n')
-
-    @kb.add('escape')  # ESC — interrupt when working
-    def _esc(event):
-        if is_working:
-            asyncio.get_event_loop().create_task(_send_interrupt())
 
     async def _send_interrupt():
         try:
@@ -252,7 +256,7 @@ async def _chat_async(verbose: bool = True):
 
     # --- Main loop ---
     print("Semillita chat")
-    print("  Enter = send | Shift+Enter = newline | ESC = stop")
+    print("  Enter = send | Shift+Enter = newline | Ctrl+C = stop")
     print("  Commands: /verbose on|off, /color HEX, exit\n")
 
     ws_task = asyncio.create_task(ws_listener())
