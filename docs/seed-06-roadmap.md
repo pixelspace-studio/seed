@@ -55,8 +55,8 @@ A gateway system to connect Semillita to the outside world — and the outside w
 External Channels          Gateway            Semillita
 ┌──────────────┐      ┌──────────────┐      ┌──────────┐
 │  WhatsApp    │─────▶│              │─────▶│          │
-│  Slack       │─────▶│   gateway.py │─────▶│  /message│
-│  Telegram    │─────▶│              │─────▶│  /inject │
+│  Slack       │─────▶│   gateway.py │─────▶│ /message │
+│  Telegram    │─────▶│              │      │  (queue) │
 │  Email       │─────▶│  normalize   │      │          │
 │  Webhooks    │─────▶│  route       │◀─────│  events  │
 └──────────────┘      │  deliver     │      └──────────┘
@@ -67,7 +67,7 @@ External Channels          Gateway            Semillita
 - Each channel is a plugin (like tools) — a Python file with `receive()` and `send()`
 - Gateway normalizes all incoming messages to `{"text": ..., "source": "whatsapp", "metadata": {...}}`
 - Gateway delivers outgoing messages to the right channel based on source
-- All channels talk to the existing `/message` and `/inject` endpoints
+- All channels talk to the `/message` endpoint (fire-and-forget via `await_response=false`, or blocking)
 - Agent can reply to the channel the message came from, or broadcast to multiple
 
 ### Channels to implement
@@ -161,6 +161,13 @@ agents/shared/skills/      # Agent-created, shared between agents
 - Skills reference tools: "when you need to click a button, use the computer tool with action=click"
 - Skills are living documents — agent can improve them over time
 
+### Skill manifest
+Auto-generated index of all available skills — a quick taxonomical listing the agent can consult to know what skills exist before deciding to read one in full. Similar to how the registry discovers tools and agents discover each other:
+- Scan `core/skills/` and `agents/shared/skills/` on startup (and on hot-reload)
+- Generate a manifest file (e.g. `agents/shared/skills/_manifest.md`) with name + one-line description per skill
+- The agent's system prompt mentions the manifest exists and where to find it — the agent can read it when needed
+- Agent-created skills auto-register into the manifest (like tools auto-register into the registry)
+
 ---
 
 ## 7. Multi-Agent System
@@ -185,12 +192,12 @@ User → Orchestrator Agent → delegates to:
 ```
 Agent A ←→ Agent B ←→ Agent C
   Each has own session, tools, identity
-  Communicate via message passing (/inject to each other)
+  Communicate via message passing (AgentMessage → queue)
 ```
 
 ### Implementation ideas
-- Each agent is a separate `loop.py` instance with its own session and registry
-- Agents communicate via the existing `/message` and `/inject` endpoints
+- Each agent is a permanent lifecycle loop (`core/lifecycle.py`) with its own session and queue
+- Agents communicate via `send_message` tool (fire-and-forget AgentMessage → target queue)
 - Shared tools and skills live in `agents/shared/`
 - Each agent's identity lives in `agents/{name}/`
 - Start with Option A (simpler) — one orchestrator that spawns sub-loops
@@ -270,8 +277,7 @@ Two directions:
 
 Ensure all agent capabilities are accessible via HTTP:
 
-- [x] POST /message — send message
-- [x] POST /inject — inject mid-loop
+- [x] POST /message — send message (`await_response=true` blocks, `false` queues fire-and-forget)
 - [x] POST /interrupt — stop current work
 - [x] POST /model — switch model
 - [x] GET /status — current state

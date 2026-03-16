@@ -14,7 +14,7 @@ MAX_OUTPUT = 100 * 1024  # 100KB
 def _audit(command: str, exit_code: int | None, duration_ms: float, truncated: bool = False, error: str = None):
     """Append to audit log. Every bash command gets recorded."""
     import json
-    from core.agent_state import get_active_agent
+    from core.agent import get_active_agent
     agent = get_active_agent()
     audit_log = os.path.join(agent.data_dir, "audit.jsonl") if agent else "audit.jsonl"
     os.makedirs(os.path.dirname(audit_log) or ".", exist_ok=True)

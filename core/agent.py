@@ -9,16 +9,25 @@ from core.session import Session
 
 
 @dataclass
+class AgentMessage:
+    """Unified message type for all sources: human, agent, cron, webhook."""
+    text: str
+    source: str                                    # "human", "agent:buscador", "cron:daily"
+    response_future: asyncio.Future = None         # set when caller wants to await
+
+
+@dataclass
 class AgentState:
     name: str
     agent_dir: str           # agents/{name}/
     data_dir: str            # agents/{name}/data/
     session: Session
-    inject_queue: asyncio.Queue
+    queue: asyncio.Queue
     interrupt: asyncio.Event
     status: dict = field(default_factory=lambda: {"state": "idle"})
     model: str = "claude-sonnet-4-6"
     max_context_tokens: int = 180000
+    _loop_task: asyncio.Task = None
 
 
 def _context_for_model(model_id: str, models: dict) -> int:
@@ -33,7 +42,7 @@ def _context_for_model(model_id: str, models: dict) -> int:
 def get_active_agent():
     """Get the currently working agent, or fall back to default."""
     from core.config import config
-    from core.state import agents
+    from core.globals import agents
     for agent in agents.values():
         if agent.status.get("state") == "working":
             return agent
@@ -68,7 +77,7 @@ def create_agent(seed_dir: str, name: str, identity: str, model: str = None) -> 
         agent_dir=agent_dir,
         data_dir=data_dir,
         session=Session(data_dir=data_dir),
-        inject_queue=asyncio.Queue(),
+        queue=asyncio.Queue(),
         interrupt=asyncio.Event(),
         model=model,
         max_context_tokens=max_context,
@@ -114,7 +123,7 @@ def discover_agents(seed_dir: str) -> dict[str, AgentState]:
             agent_dir=agent_dir,
             data_dir=data_dir,
             session=Session(data_dir=data_dir),
-            inject_queue=asyncio.Queue(),
+            queue=asyncio.Queue(),
             interrupt=asyncio.Event(),
             model=model,
             max_context_tokens=max_context,

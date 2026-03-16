@@ -4,7 +4,6 @@ import asyncio
 import json
 import logging
 import os
-import traceback
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
@@ -12,10 +11,11 @@ from pydantic import BaseModel
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 from core.config import config
-from core.agent_state import discover_agents, create_agent, _context_for_model
-from core.state import agents
+from core.agent import discover_agents, create_agent, _context_for_model, AgentMessage
+from core.globals import agents
+from core import globals as shared_globals
 from core.registry import Registry
-from core.loop import run
+from core.lifecycle import start_agent_loop
 
 app = FastAPI(title="Semillita", version="0.1")
 
@@ -74,6 +74,15 @@ def _models_json() -> dict:
 async def startup():
     agents.update(discover_agents(config.seed_dir))
     registry.load()
+
+    # Store refs so tools (create_agent) can start actor loops
+    shared_globals._registry = registry
+    shared_globals._event_sink = event_sink
+
+    # Start a permanent actor loop for each agent
+    for agent in agents.values():
+        start_agent_loop(agent, registry, event_sink)
+
     tools = registry.get_tool_names()
     agent_names = list(agents.keys())
     print()
@@ -91,6 +100,7 @@ async def startup():
 class MessageRequest(BaseModel):
     text: str
     source: str = "human"
+    await_response: bool = True
 
 
 class MessageResponse(BaseModel):
@@ -107,38 +117,23 @@ class CreateAgentRequest(BaseModel):
 
 
 # --- Agent-scoped endpoints ---
-@app.post("/agents/{name}/message", response_model=MessageResponse)
+@app.post("/agents/{name}/message")
 async def post_agent_message(name: str, req: MessageRequest):
     agent = _get_agent(name)
     if not agent:
         return MessageResponse(response=f"Unknown agent: {name}")
     if not agent.model:
         return MessageResponse(response=f"Agent '{name}' has no model set. Use /model to pick one first.")
-    # Drain stale injected messages
-    while not agent.inject_queue.empty():
-        try:
-            agent.inject_queue.get_nowait()
-        except asyncio.QueueEmpty:
-            break
-    agent.status["state"] = "working"
-    agent.interrupt.clear()
-    try:
-        result = await run(
-            message=req.text,
-            source=req.source,
-            agent_state=agent,
-            registry=registry,
-            event_sink=event_sink,
-        )
+
+    loop = asyncio.get_running_loop()
+    future = loop.create_future() if req.await_response else None
+    msg = AgentMessage(text=req.text, source=req.source, response_future=future)
+    await agent.queue.put(msg)
+
+    if future:
+        result = await future
         return MessageResponse(response=result)
-    except Exception as e:
-        tb = traceback.format_exc()
-        logging.error(f"Error processing message for {name}: {e}\n{tb}")
-        await manager.broadcast({"type": "error", "message": str(e), "agent": name})
-        raise
-    finally:
-        agent.status["state"] = "idle"
-        await manager.broadcast({"type": "idle", "agent": name})
+    return {"queued": True}
 
 
 @app.get("/agents/{name}/status")
@@ -155,18 +150,6 @@ async def get_agent_history(name: str):
     if not agent:
         return {"error": f"Unknown agent: {name}"}
     return agent.session.load()
-
-
-@app.post("/agents/{name}/inject")
-async def post_agent_inject(name: str, req: MessageRequest):
-    agent = _get_agent(name)
-    if not agent:
-        return {"ok": False, "error": f"Unknown agent: {name}"}
-    if agent.status["state"] != "working":
-        return {"ok": False, "error": "Not working. Use /agents/{name}/message instead."}
-    await agent.inject_queue.put({"text": req.text, "source": req.source})
-    await manager.broadcast({"type": "injected", "text": req.text, "agent": name})
-    return {"ok": True}
 
 
 @app.post("/agents/{name}/interrupt")
@@ -239,6 +222,7 @@ async def post_create_agent(name: str, req: CreateAgentRequest):
     try:
         agent = create_agent(config.seed_dir, name, req.identity, req.model)
         agents[name] = agent
+        start_agent_loop(agent, registry, event_sink)
         return {"ok": True, "agent": {"name": name, "model": agent.model}}
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -257,6 +241,13 @@ async def websocket_stream(ws: WebSocket):
             await ws.receive_text()  # keep alive
     except WebSocketDisconnect:
         manager.disconnect(ws)
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    for agent in agents.values():
+        if agent._loop_task and not agent._loop_task.done():
+            agent._loop_task.cancel()
 
 
 if __name__ == "__main__":

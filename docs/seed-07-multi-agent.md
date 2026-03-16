@@ -19,9 +19,9 @@ Multiple agents running in a single FastAPI process, each with their own identit
                     │  ┌─────────────┐  ┌─────────────┐      │
                     │  │  semillita  │  │  researcher  │ ...  │
                     │  │             │  │              │      │
-                    │  │  loop.py    │  │  loop.py     │      │
+                    │  │  actor loop │  │  actor loop  │      │
                     │  │  session    │  │  session     │      │
-                    │  │  inject_q   │  │  inject_q    │      │
+                    │  │  queue      │  │  queue       │      │
                     │  │  interrupt  │  │  interrupt   │      │
                     │  └──────┬──────┘  └──────┬───────┘      │
                     │         │                │              │
@@ -35,7 +35,8 @@ Multiple agents running in a single FastAPI process, each with their own identit
 - Identity (`agents/{name}/identity.md`)
 - Data (`agents/{name}/data/` — history, audit, changelog, files, .model)
 - Session (own history.jsonl, own sliding window)
-- Inject queue (own message queue)
+- Message queue (one queue per agent, fed by humans, other agents, crons)
+- Actor loop (permanent `asyncio.Task` — always alive, drains queue)
 - Interrupt event (own stop signal)
 - Model selection (each agent can use a different model)
 
@@ -77,50 +78,52 @@ To create a new agent: create a folder with an `identity.md`. That's it. The sys
 
 ```python
 @dataclass
-class AgentInstance:
-    name: str
-    config: Config           # agent-specific config (model, data dir)
-    session: Session         # own history
-    registry: Registry       # shared tools (same for all)
-    inject_queue: asyncio.Queue
-    interrupt: asyncio.Event
-    status: str = "idle"     # idle | working
+class AgentMessage:
+    text: str
+    source: str                          # "human", "agent:buscador", "cron:daily"
+    response_future: asyncio.Future = None  # set when caller wants to await
 
-# On startup
-agents: dict[str, AgentInstance] = {}
+@dataclass
+class AgentState:
+    name: str
+    agent_dir: str
+    data_dir: str
+    session: Session
+    queue: asyncio.Queue          # one queue, all sources
+    interrupt: asyncio.Event
+    status: dict                  # {"state": "idle"} | {"state": "working"}
+    model: str
+    _loop_task: asyncio.Task = None  # the permanent actor loop
+
+# On startup — discover agents + start actor loops
+agents: dict[str, AgentState] = {}
 for agent_dir in glob("agents/*/identity.md"):
     name = agent_dir.parent.name
     if name == "shared":
         continue
-    agents[name] = AgentInstance(...)
+    agents[name] = AgentState(...)
+    start_agent_loop(agents[name], registry, event_sink)
 ```
 
 ---
 
 ## API: Agent-Scoped Endpoints
 
-Option A — path prefix:
 ```
-POST /agents/semillita/message
+POST /agents/semillita/message        # await_response=true (default) blocks until done
+POST /agents/semillita/message        # await_response=false returns {"queued": true}
 POST /agents/researcher/message
-POST /agents/semillita/inject
 GET  /agents/semillita/status
 GET  /agents                          # list all agents
 ```
 
-Option B — query param:
-```
-POST /message?agent=semillita
-POST /message?agent=researcher
-```
-
-Option A is cleaner. Default agent (when path is just `/message`) could be configurable — defaults to `semillita`.
+All messages go through `/message`. The `await_response` flag controls whether the caller blocks or fires-and-forgets.
 
 ---
 
 ## Inter-Agent Communication
 
-Agents talk to each other using the existing inject mechanism:
+Each agent is a permanent actor (always-alive `asyncio.Task`). Messages from any source — human, other agents, crons — go into the agent's queue. The actor loop processes them one at a time.
 
 ### Tool: `send_message`
 
@@ -131,14 +134,13 @@ async def execute(agent: str, message: str) -> str:
     if not target:
         return f"Unknown agent: {agent}"
 
-    await target.inject_queue.put({
-        "text": message,
-        "source": f"agent:{config.agent_name}",
-    })
+    caller = get_active_agent()
+    source = f"agent:{caller.name}" if caller else "agent"
+    await target.queue.put(AgentMessage(text=message, source=source))
     return f"Message sent to {agent}"
 ```
 
-The receiving agent sees it as a regular injected message. The `source` field tells them who sent it.
+Fire-and-forget — the message lands in the target's queue and the target's actor loop picks it up. The `source` field tells the receiver who sent it.
 
 ### How it works in practice
 
@@ -149,18 +151,20 @@ semillita thinks: "I'll ask the researcher agent to do this"
 
 semillita → send_message(agent="researcher", message="Find the top 5 chess engines...")
 
-researcher's inject_queue receives the message
-researcher starts working (web_search, web_fetch, etc.)
+researcher's queue receives the AgentMessage
+researcher's actor loop wakes up, starts working (web_search, web_fetch, etc.)
 researcher → send_message(agent="semillita", message="Here are the top 5: ...")
 
-semillita receives the response in her inject_queue
+semillita's queue receives the response
+semillita's actor loop processes it on the next cycle
 semillita → respond to user with the summary
 ```
 
-### No new infrastructure needed
-- `inject_queue` already exists and works
-- `source` field already distinguishes message origins
-- The loop already drains the queue each iteration
+### Why this works
+- Each agent has a permanent actor loop — always alive, always listening
+- One queue per agent, one consumer — messages are processed in order
+- `AgentMessage` unifies all sources: human, agent, cron, webhook
+- `response_future` enables blocking (HTTP) or fire-and-forget (agent-to-agent)
 - WebSocket events already broadcast to all listeners
 
 ---
@@ -268,9 +272,11 @@ One agent explicitly asks another for help via `send_message`.
 An agent sends a message to all agents:
 ```python
 async def execute(message: str) -> str:
+    caller = get_active_agent()
+    source = f"agent:{caller.name}" if caller else "agent"
     for name, agent in agents.items():
-        if name != config.agent_name:
-            await agent.inject_queue.put({"text": message, "source": f"agent:{config.agent_name}"})
+        if name != caller.name:
+            await agent.queue.put(AgentMessage(text=message, source=source))
 ```
 
 ### Pipeline
@@ -302,12 +308,12 @@ Combined with heartbeat: agents wake up periodically, check if other agents left
 | Per-agent identity | Done (agents/{name}/identity.md) |
 | Shared protocol | Done (agents/shared/protocol.md) |
 | Shared tools and skills | Done (agents/shared/) |
-| Inject queue (message passing) | Done (used for user inject) |
-| Source tracking on messages | Done (source field) |
-| Agent-scoped config | Done (config.agent_name, agent_dir, agent_data_dir) |
-| Multiple agent instances | Not yet (main.py hardcodes one) |
-| Inter-agent communication tool | Not yet |
-| Agent-scoped API endpoints | Not yet |
-| CLI multi-agent support | Not yet |
-
-The foundation is in place. The remaining work is in `main.py` (instantiation) and `cli.py` (UI).
+| Lifecycle (always-alive agents) | Done (core/lifecycle.py — permanent asyncio.Task per agent) |
+| Unified message queue | Done (AgentMessage → agent.queue) |
+| Source tracking on messages | Done (source field in AgentMessage) |
+| Multiple agent instances | Done (discover_agents + start_agent_loop at startup) |
+| Inter-agent communication tool | Done (send_message — fire-and-forget via queue) |
+| Agent-scoped API endpoints | Done (/agents/{name}/message, status, history, interrupt, model) |
+| CLI multi-agent support | Done (/agent command — switch, list, create) |
+| Runtime agent creation | Done (create_agent tool + POST /agents/{name}/create) |
+| Fire-and-forget messaging | Done (await_response=false on /message) |

@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from core.config import config
 
 def _get_data_dir():
-    from core.agent_state import get_active_agent
+    from core.agent import get_active_agent
     agent = get_active_agent()
     return agent.data_dir if agent else "data"
 

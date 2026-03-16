@@ -559,12 +559,12 @@ async def _chat_async(verbose: bool = True, model: str = None):
                     if is_working:
                         try:
                             await client.post(
-                                f"/agents/{active_agent}/inject",
-                                json={"text": text},
+                                f"/agents/{active_agent}/message",
+                                json={"text": text, "await_response": False},
                                 timeout=5,
                             )
                         except Exception as e:
-                            _cprint(f"  inject error: {e}")
+                            _cprint(f"  send error: {e}")
                     else:
                         is_working = True
                         asyncio.create_task(send_msg(text))

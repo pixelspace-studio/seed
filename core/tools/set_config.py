@@ -31,7 +31,7 @@ async def execute(key: str, value: str) -> str:
         return f"Invalid value '{value}' for {key} (expected {cast.__name__})"
 
     if key in AGENT_MUTABLE:
-        from core.agent_state import get_active_agent
+        from core.agent import get_active_agent
         agent = get_active_agent()
         if not agent:
             return "No active agent to set config on."

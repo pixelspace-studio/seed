@@ -4,7 +4,7 @@ import asyncio
 import os
 from typing import Callable
 
-from core.agent_state import AgentState
+from core.agent import AgentState
 from core.config import config
 from core.registry import Registry
 from core.provider import send as provider_send
@@ -21,7 +21,6 @@ async def run(
 
     session = agent_state.session
     interrupt = agent_state.interrupt
-    inject_queue = agent_state.inject_queue
 
     def emit(event: dict):
         if event_sink:
@@ -62,27 +61,6 @@ async def run(
             emit({"type": "interrupted"})
             return "[interrupted]"
 
-        # Drain injected messages from queue
-        if inject_queue:
-            while not inject_queue.empty():
-                try:
-                    injected = inject_queue.get_nowait()
-                    inject_msg = {
-                        "role": "user",
-                        "content": injected["text"],
-                        "source": injected.get("source", "human"),
-                    }
-                    messages.append(inject_msg)
-                    session.append(inject_msg)
-                    emit({
-                        "type": "message_received",
-                        "source": inject_msg["source"],
-                        "text": injected["text"],
-                        "injected": True,
-                    })
-                except asyncio.QueueEmpty:
-                    break
-
         # Check reload flag
         reload_flag = os.path.join(agent_state.data_dir, ".reload_flag")
         if os.path.exists(reload_flag):
@@ -101,39 +79,8 @@ async def run(
             cfg=config,
         )
 
-        # No tool calls → check for injected messages before returning.
-        # User may have typed while provider_send() was blocking.
+        # No tool calls → return final response
         if not response.tool_calls:
-            injected_msgs = []
-            if inject_queue and not inject_queue.empty():
-                while not inject_queue.empty():
-                    try:
-                        injected = inject_queue.get_nowait()
-                        injected_msgs.append(injected)
-                    except asyncio.QueueEmpty:
-                        break
-            if injected_msgs:
-                # Save assistant response first, then append injected user
-                # messages so the conversation ends with a user message.
-                assistant_msg = {"role": "assistant", "content": response.content}
-                messages.append(assistant_msg)
-                session.append(assistant_msg)
-                for injected in injected_msgs:
-                    inject_msg = {
-                        "role": "user",
-                        "content": injected["text"],
-                        "source": injected.get("source", "human"),
-                    }
-                    messages.append(inject_msg)
-                    session.append(inject_msg)
-                    emit({
-                        "type": "message_received",
-                        "source": inject_msg["source"],
-                        "text": injected["text"],
-                        "injected": True,
-                    })
-                continue
-
             text = response.content
             if not text and last_respond:
                 text = last_respond

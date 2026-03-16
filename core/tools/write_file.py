@@ -7,7 +7,7 @@ from core.config import config
 
 def _log_change(path: str, action: str):
     """Append to changelog when modifying tools/ or prompt.md."""
-    from core.agent_state import get_active_agent
+    from core.agent import get_active_agent
     agent = get_active_agent()
     changelog_path = os.path.join(agent.data_dir, "changelog.md") if agent else "changelog.md"
     os.makedirs(os.path.dirname(changelog_path) or ".", exist_ok=True)
@@ -40,7 +40,7 @@ async def execute(path: str, content: str) -> str:
         _log_change(rel, action)
 
         # Signal that registry should reload (checked by the loop)
-        from core.agent_state import get_active_agent
+        from core.agent import get_active_agent
         _agent = get_active_agent()
         flag_path = os.path.join(_agent.data_dir, ".reload_flag") if _agent else ".reload_flag"
         with open(flag_path, "w") as f:

@@ -6,7 +6,7 @@ import subprocess
 from datetime import datetime, timezone
 
 def _temp_dir():
-    from core.agent_state import get_active_agent
+    from core.agent import get_active_agent
     agent = get_active_agent()
     data_dir = agent.data_dir if agent else "data"
     return os.path.join(data_dir, "files", "temp")

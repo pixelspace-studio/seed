@@ -68,7 +68,10 @@ seed/
 ├── seed.sh              # Install, start, stop, update, chat
 │
 ├── core/                # The kernel (~500 lines)
-│   ├── loop.py          # Agent loop — the heart
+│   ├── agent.py         # AgentState, AgentMessage, discovery, factory
+│   ├── lifecycle.py     # Always-alive loop — discovered → started → working ⇄ idle
+│   ├── loop.py          # Single-message processing — the thinking engine
+│   ├── globals.py       # Shared mutable state (one dict, everyone imports it)
 │   ├── provider.py      # Multi-provider routing (Anthropic, OpenAI, Google)
 │   ├── registry.py      # Tool discovery and hot-reload
 │   ├── session.py       # Conversation history (JSONL + sliding window)
@@ -112,8 +115,7 @@ seed/
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/message` | POST | Send a message, get a response |
-| `/inject` | POST | Inject a message mid-loop |
+| `/message` | POST | Send a message (`await_response=true` blocks, `false` queues fire-and-forget) |
 | `/interrupt` | POST | Stop current task |
 | `/model` | POST | Switch AI model |
 | `/status` | GET | Current state and active model |

@@ -3,8 +3,8 @@
 
 async def execute(name: str, identity: str, model: str = None) -> str:
     from core.config import config
-    from core.agent_state import create_agent
-    from core.state import agents
+    from core.agent import create_agent
+    from core.globals import agents
 
     name = name.strip().lower()
 
@@ -15,13 +15,20 @@ async def execute(name: str, identity: str, model: str = None) -> str:
 
     # Default to the calling agent's model
     if not model:
-        from core.agent_state import get_active_agent
+        from core.agent import get_active_agent
         caller = get_active_agent()
         model = caller.model if caller else "claude-sonnet-4-6"
 
     try:
         agent = create_agent(config.seed_dir, name, identity, model)
         agents[name] = agent
+
+        # Start actor loop so the new agent is immediately alive
+        from core.lifecycle import start_agent_loop
+        from core import globals as shared_globals
+        if shared_globals._registry and shared_globals._event_sink:
+            start_agent_loop(agent, shared_globals._registry, shared_globals._event_sink)
+
         return f"Agent '{name}' created and ready. Model: {model}."
     except Exception as e:
         return f"Error creating agent: {e}"
