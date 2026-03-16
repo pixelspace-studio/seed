@@ -12,7 +12,7 @@ from pydantic import BaseModel
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 from core.config import config
-from core.agent_state import AgentState, discover_agents, _context_for_model
+from core.agent_state import AgentState, discover_agents, create_agent, _context_for_model
 from core.registry import Registry
 from core.loop import run
 
@@ -78,6 +78,9 @@ async def startup():
     agent_names = list(agents.keys())
     print()
     print("  Semillita is awake.")
+    for a in agents.values():
+        if not a.model:
+            print(f"  ⚠ Agent '{a.name}' has no model set — use /model to pick one")
     print(f"  Agents: {', '.join(agent_names)}")
     print(f"  Tools: {', '.join(tools)}")
     print(f"  Listening on http://{config.host}:{config.port}")
@@ -98,12 +101,19 @@ class ModelRequest(BaseModel):
     text: str
 
 
+class CreateAgentRequest(BaseModel):
+    identity: str
+    model: str = None
+
+
 # --- Agent-scoped endpoints ---
 @app.post("/agents/{name}/message", response_model=MessageResponse)
 async def post_agent_message(name: str, req: MessageRequest):
     agent = _get_agent(name)
     if not agent:
         return MessageResponse(response=f"Unknown agent: {name}")
+    if not agent.model:
+        return MessageResponse(response=f"Agent '{name}' has no model set. Use /model to pick one first.")
     # Drain stale injected messages
     while not agent.inject_queue.empty():
         try:
@@ -218,6 +228,20 @@ async def get_agents():
         {"name": a.name, "status": a.status["state"], "model": a.model}
         for a in agents.values()
     ]
+
+
+@app.post("/agents/{name}/create")
+async def post_create_agent(name: str, req: CreateAgentRequest):
+    if name in agents:
+        return {"ok": False, "error": f"Agent '{name}' already exists"}
+    if name == "shared":
+        return {"ok": False, "error": "'shared' is reserved"}
+    try:
+        agent = create_agent(config.seed_dir, name, req.identity, req.model)
+        agents[name] = agent
+        return {"ok": True, "agent": {"name": name, "model": agent.model}}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 @app.get("/models")

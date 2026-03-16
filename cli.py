@@ -311,7 +311,7 @@ async def _chat_async(verbose: bool = True, model: str = None):
         _version = "?"
     print(f"Semillita v{_version}")
     print("  Enter = send | Shift+Enter = newline | ESC = interrupt")
-    print("  Commands: /model, /agent, /agents, /color, /verbose on|off, exit\n")
+    print("  Commands: /model, /agent, /agent new, /color, /verbose on|off, exit\n")
 
     async def _pick_model(out=print):
         """Interactive model picker using GET /models."""
@@ -349,6 +349,39 @@ async def _chat_async(verbose: bool = True, model: str = None):
         except Exception as e:
             out(f"  Model switch error: {e}")
             return False
+
+    async def _create_agent_interactive(out=print):
+        """Interactive agent creation: name → create → pick model → switch."""
+        nonlocal active_agent
+        try:
+            name = input("  Agent name (lowercase, no spaces): ").strip().lower()
+            if not name:
+                return
+            identity = (
+                f"# {name.title()}\n\n"
+                f"You are {name}.\n\n"
+                f"Your identity is pending. "
+                f"Ask the user who you are, what you do, and how you should behave. "
+                f"Then update your own identity.md with what they tell you.\n"
+            )
+            out(f"  Creating agent '{name}'...")
+            r = await client.post(
+                f"/agents/{name}/create",
+                json={"identity": identity},
+                timeout=5,
+            )
+            r.raise_for_status()
+            data = r.json()
+            if not data.get("ok"):
+                out(f"  Error: {data.get('error', '?')}")
+                return
+            # Switch to new agent and pick its model
+            active_agent = name
+            _refresh_prompt()
+            out(f"  Agent '{name}' created. Pick a model:")
+            await _pick_model(out=out)
+        except Exception as e:
+            out(f"  Error: {e}")
 
     # Switch model if requested via --model flag
     if model:
@@ -398,28 +431,37 @@ async def _chat_async(verbose: bool = True, model: str = None):
                         await _pick_model(out=_cprint)
                         continue
 
-                    # /agents command — list all agents
-                    if text.lower() == "/agents":
-                        try:
-                            r = await client.get("/agents", timeout=5)
-                            r.raise_for_status()
-                            agents_list = r.json()
-                            _cprint("  Agents:")
-                            for a in agents_list:
-                                marker = " *" if a["name"] == active_agent else ""
-                                _cprint(f"    {a['name']}: {a['status']} ({a['model']}){marker}")
-                        except Exception as e:
-                            _cprint(f"  Error: {e}")
-                        continue
-
-                    # /agent command — switch active agent
+                    # /agent command — picker, direct switch, or create
                     if text.lower().startswith("/agent"):
                         parts = text.split()
                         if len(parts) == 1:
-                            _cprint(f"  Active agent: {active_agent}")
+                            # Interactive picker
+                            try:
+                                r = await client.get("/agents", timeout=5)
+                                r.raise_for_status()
+                                agents_list = r.json()
+                                _cprint("  Agents:")
+                                for i, a in enumerate(agents_list, 1):
+                                    marker = " *" if a["name"] == active_agent else ""
+                                    _cprint(f"    {i}. {a['name']} — {a['status']} ({a['model']}){marker}")
+                                _cprint("")
+                                choice = input("  Pick a number, or 'new' to create (enter to keep current): ").strip()
+                                if choice.lower() == "new":
+                                    await _create_agent_interactive(_cprint)
+                                elif choice and choice.isdigit():
+                                    idx = int(choice) - 1
+                                    if 0 <= idx < len(agents_list):
+                                        active_agent = agents_list[idx]["name"]
+                                        _cprint(f"  Switched to {active_agent}")
+                                        _refresh_prompt()
+                                    else:
+                                        _cprint("  Invalid choice.")
+                            except Exception as e:
+                                _cprint(f"  Error: {e}")
+                        elif parts[1].lower() == "new":
+                            await _create_agent_interactive(_cprint)
                         else:
                             new_agent = parts[1]
-                            # Verify agent exists
                             try:
                                 r = await client.get(f"/agents/{new_agent}/status", timeout=5)
                                 r.raise_for_status()

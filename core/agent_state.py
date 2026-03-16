@@ -40,6 +40,41 @@ def get_active_agent():
     return agents.get(config.default_agent)
 
 
+def create_agent(seed_dir: str, name: str, identity: str, model: str = None) -> AgentState:
+    """Create a new agent: directory, identity.md, data/, and return AgentState."""
+    agents_dir = os.path.join(seed_dir, "agents")
+    agent_dir = os.path.join(agents_dir, name)
+    data_dir = os.path.join(agent_dir, "data")
+
+    if os.path.exists(os.path.join(agent_dir, "identity.md")):
+        raise ValueError(f"Agent '{name}' already exists")
+
+    os.makedirs(data_dir, exist_ok=True)
+    with open(os.path.join(agent_dir, "identity.md"), "w") as f:
+        f.write(identity)
+
+    models_path = os.path.join(seed_dir, "registry", "models.json")
+    with open(models_path) as f:
+        models = json.load(f)
+
+    # No default model — will be set via /model picker or API
+    if not model:
+        model = ""
+
+    max_context = _context_for_model(model, models)
+
+    return AgentState(
+        name=name,
+        agent_dir=agent_dir,
+        data_dir=data_dir,
+        session=Session(data_dir=data_dir),
+        inject_queue=asyncio.Queue(),
+        interrupt=asyncio.Event(),
+        model=model,
+        max_context_tokens=max_context,
+    )
+
+
 def discover_agents(seed_dir: str) -> dict[str, AgentState]:
     """Scan agents/*/identity.md, skip shared/, return AgentState per agent."""
     agents_dir = os.path.join(seed_dir, "agents")
@@ -63,8 +98,8 @@ def discover_agents(seed_dir: str) -> dict[str, AgentState]:
         data_dir = os.path.join(agent_dir, "data")
         os.makedirs(data_dir, exist_ok=True)
 
-        # Load persisted model
-        model = "claude-sonnet-4-6"
+        # Load persisted model — empty string means "not yet chosen"
+        model = ""
         model_file = os.path.join(data_dir, ".model")
         if os.path.exists(model_file):
             with open(model_file) as f:
