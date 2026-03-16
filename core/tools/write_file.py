@@ -5,15 +5,15 @@ from datetime import datetime, timezone
 
 from core.config import config
 
-CHANGELOG_PATH = os.path.join(config.agent_data_dir, "changelog.md")
-
-
 def _log_change(path: str, action: str):
     """Append to changelog when modifying tools/ or prompt.md."""
-    os.makedirs(os.path.dirname(CHANGELOG_PATH), exist_ok=True)
+    from core.agent_state import get_active_agent
+    agent = get_active_agent()
+    changelog_path = os.path.join(agent.data_dir, "changelog.md") if agent else "changelog.md"
+    os.makedirs(os.path.dirname(changelog_path) or ".", exist_ok=True)
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     entry = f"- [{ts}] {action}: `{path}`\n"
-    with open(CHANGELOG_PATH, "a") as f:
+    with open(changelog_path, "a") as f:
         f.write(entry)
 
 
@@ -40,7 +40,9 @@ async def execute(path: str, content: str) -> str:
         _log_change(rel, action)
 
         # Signal that registry should reload (checked by the loop)
-        flag_path = os.path.join(config.agent_data_dir, ".reload_flag")
+        from core.agent_state import get_active_agent
+        _agent = get_active_agent()
+        flag_path = os.path.join(_agent.data_dir, ".reload_flag") if _agent else ".reload_flag"
         with open(flag_path, "w") as f:
             f.write("1")
 

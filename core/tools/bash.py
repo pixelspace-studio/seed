@@ -9,13 +9,15 @@ from datetime import datetime, timezone
 from core.config import config
 
 MAX_OUTPUT = 100 * 1024  # 100KB
-AUDIT_LOG = os.path.join(config.agent_data_dir, "audit.jsonl")
 
 
 def _audit(command: str, exit_code: int | None, duration_ms: float, truncated: bool = False, error: str = None):
     """Append to audit log. Every bash command gets recorded."""
     import json
-    os.makedirs(os.path.dirname(AUDIT_LOG), exist_ok=True)
+    from core.agent_state import get_active_agent
+    agent = get_active_agent()
+    audit_log = os.path.join(agent.data_dir, "audit.jsonl") if agent else "audit.jsonl"
+    os.makedirs(os.path.dirname(audit_log) or ".", exist_ok=True)
     entry = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "tool": "bash",
@@ -26,7 +28,7 @@ def _audit(command: str, exit_code: int | None, duration_ms: float, truncated: b
     }
     if error:
         entry["error"] = error
-    with open(AUDIT_LOG, "a") as f:
+    with open(audit_log, "a") as f:
         f.write(json.dumps(entry) + "\n")
 
 

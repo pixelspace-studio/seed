@@ -8,7 +8,6 @@ from core.config import config
 MODELS_PATH = os.path.join(config.seed_dir, "registry", "models.json")
 
 
-
 def _load_models():
     with open(MODELS_PATH, "r") as f:
         return json.load(f)
@@ -22,8 +21,10 @@ def _recommended_context(context_window):
 
 
 async def execute(model: str) -> str:
-    models = _load_models()
+    """Switch the model for the calling agent. Finds agent via main.agents."""
+    from main import agents
 
+    models = _load_models()
     resolved = model.strip()
 
     if resolved not in models:
@@ -36,7 +37,6 @@ async def execute(model: str) -> str:
 
     info = models[resolved]
 
-    # Only allow models with text capability as the chat model
     if "text" not in info["capabilities"]:
         caps = ", ".join(info["capabilities"])
         return (
@@ -44,26 +44,40 @@ async def execute(model: str) -> str:
             f"It can be used through its specific tool, not as the main model."
         )
 
-    previous = config.model
+    # Find which agent is currently working (the one calling this tool)
+    active_agent = None
+    for agent in agents.values():
+        if agent.status.get("state") == "working":
+            active_agent = agent
+            break
+
+    if not active_agent:
+        # Fallback to default agent
+        active_agent = agents.get(config.default_agent)
+
+    if not active_agent:
+        return "No active agent found to switch model for."
+
+    previous = active_agent.model
     if resolved == previous:
         return f"Already using {resolved}."
 
-    config.model = resolved
+    active_agent.model = resolved
 
     # Persist selection
-    model_file = os.path.join(config.agent_data_dir, ".model")
+    model_file = os.path.join(active_agent.data_dir, ".model")
     with open(model_file, "w") as f:
         f.write(resolved)
 
     # Auto-adjust context window
     recommended = _recommended_context(info.get("context"))
     if recommended:
-        config.max_context_tokens = recommended
+        active_agent.max_context_tokens = recommended
 
     return (
         f"Switched from {previous} → {info['name']} ({resolved}). "
         f"Provider: {info['provider']}. "
-        f"Context window adjusted to {config.max_context_tokens:,} tokens."
+        f"Context window adjusted to {active_agent.max_context_tokens:,} tokens."
     )
 
 

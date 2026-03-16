@@ -2,13 +2,19 @@
 
 from core.config import config
 
-# Which config fields can be changed at runtime, with their types
-MUTABLE = {
+# Config-level mutable fields
+CONFIG_MUTABLE = {
     "max_iterations": int,
-    "max_context_tokens": int,
     "context_keep_recent": int,
     "chars_per_token": float,
 }
+
+# Agent-level mutable fields
+AGENT_MUTABLE = {
+    "max_context_tokens": int,
+}
+
+MUTABLE = {**CONFIG_MUTABLE, **AGENT_MUTABLE}
 
 
 async def execute(key: str, value: str) -> str:
@@ -24,8 +30,17 @@ async def execute(key: str, value: str) -> str:
     except (ValueError, TypeError):
         return f"Invalid value '{value}' for {key} (expected {cast.__name__})"
 
-    old_value = getattr(config, key)
-    setattr(config, key, new_value)
+    if key in AGENT_MUTABLE:
+        from core.agent_state import get_active_agent
+        agent = get_active_agent()
+        if not agent:
+            return "No active agent to set config on."
+        old_value = getattr(agent, key)
+        setattr(agent, key, new_value)
+    else:
+        old_value = getattr(config, key)
+        setattr(config, key, new_value)
+
     return f"{key}: {old_value} → {new_value}"
 
 
@@ -34,7 +49,7 @@ tool = {
     "description": (
         "Change a runtime configuration value. "
         "Available keys: max_iterations (agent loop limit), "
-        "max_context_tokens (context window size), "
+        "max_context_tokens (context window size, per-agent), "
         "context_keep_recent (minimum protected messages), "
         "chars_per_token (token estimation ratio). "
         "Use this when the user wants to adjust iteration limits or context settings."

@@ -4,25 +4,28 @@ import asyncio
 import os
 from typing import Callable
 
+from core.agent_state import AgentState
 from core.config import config
 from core.registry import Registry
-from core.session import Session
 from core.provider import send as provider_send
 
 
 async def run(
     message: str,
     source: str,
-    session: Session,
+    agent_state: AgentState,
     registry: Registry,
     event_sink: Callable = None,
-    interrupt: asyncio.Event = None,
-    inject_queue: asyncio.Queue = None,
 ) -> str:
     """Run the agent loop for a single message. Returns final response text."""
 
+    session = agent_state.session
+    interrupt = agent_state.interrupt
+    inject_queue = agent_state.inject_queue
+
     def emit(event: dict):
         if event_sink:
+            event["agent"] = agent_state.name
             event_sink(event)
 
     # Load system prompt: shared protocol + agent identity
@@ -31,14 +34,19 @@ async def run(
     if os.path.exists(shared_protocol):
         with open(shared_protocol, "r") as f:
             parts.append(f.read())
-    identity = os.path.join(config.agent_dir, "identity.md")
+    identity = os.path.join(agent_state.agent_dir, "identity.md")
     if os.path.exists(identity):
         with open(identity, "r") as f:
             parts.append(f.read())
     system_prompt = "\n\n---\n\n".join(parts)
 
     # Build messages: history + new message
-    messages = session.get_context(cfg=config)
+    # Build a lightweight cfg-like object for session's sliding window
+    class _Cfg:
+        max_context_tokens = agent_state.max_context_tokens
+        context_keep_recent = config.context_keep_recent
+        chars_per_token = config.chars_per_token
+    messages = session.get_context(cfg=_Cfg())
     user_msg = {"role": "user", "content": message, "source": source}
     session.append(user_msg)
     messages.append(user_msg)
@@ -76,19 +84,19 @@ async def run(
                     break
 
         # Check reload flag
-        reload_flag = os.path.join(config.agent_data_dir, ".reload_flag")
+        reload_flag = os.path.join(agent_state.data_dir, ".reload_flag")
         if os.path.exists(reload_flag):
             os.remove(reload_flag)
             registry.reload_custom()
             tools_schema = registry.get_tools_schema()
 
-        emit({"type": "thinking", "model": config.model, "iteration": iteration + 1})
+        emit({"type": "thinking", "model": agent_state.model, "iteration": iteration + 1})
 
         # Call provider
         response = await provider_send(
             messages=messages,
             tools=tools_schema,
-            model=config.model,
+            model=agent_state.model,
             system=system_prompt,
             cfg=config,
         )

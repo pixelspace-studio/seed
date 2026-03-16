@@ -20,7 +20,9 @@ def _load_models():
 def _get_vision_model():
     """Get the current model if it supports vision, or find one that does."""
     models = _load_models()
-    current = config.model
+    from core.agent_state import get_active_agent
+    agent = get_active_agent()
+    current = agent.model if agent else "claude-sonnet-4-6"
 
     # Current model supports vision? Use it.
     if current in models and "vision" in models[current].get("capabilities", []):

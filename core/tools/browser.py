@@ -12,8 +12,16 @@ from datetime import datetime, timezone
 
 from core.config import config
 
-TEMP_DIR = os.path.join(config.agent_data_dir, "files", "temp")
-SESSIONS_FILE = os.path.join(config.agent_data_dir, "browser_sessions.json")
+def _get_data_dir():
+    from core.agent_state import get_active_agent
+    agent = get_active_agent()
+    return agent.data_dir if agent else "data"
+
+def _temp_dir():
+    return os.path.join(_get_data_dir(), "files", "temp")
+
+def _sessions_file():
+    return os.path.join(_get_data_dir(), "browser_sessions.json")
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
 
 # Base port for CDP — each session gets base + offset
@@ -25,9 +33,10 @@ _sessions: dict = {}
 
 def _load_persisted() -> dict:
     """Load persisted session info from disk."""
-    if os.path.exists(SESSIONS_FILE):
+    sf = _sessions_file()
+    if os.path.exists(sf):
         try:
-            with open(SESSIONS_FILE, "r") as f:
+            with open(sf, "r") as f:
                 return json.load(f)
         except Exception:
             return {}
@@ -36,8 +45,9 @@ def _load_persisted() -> dict:
 
 def _save_persisted(data: dict):
     """Save session info to disk."""
-    os.makedirs(os.path.dirname(SESSIONS_FILE), exist_ok=True)
-    with open(SESSIONS_FILE, "w") as f:
+    sf = _sessions_file()
+    os.makedirs(os.path.dirname(sf), exist_ok=True)
+    with open(sf, "w") as f:
         json.dump(data, f, indent=2)
 
 
@@ -135,6 +145,7 @@ async def execute(
     timeout: int = 15000,
     session: str = "default",
 ) -> str:
+    TEMP_DIR = _temp_dir()
     os.makedirs(TEMP_DIR, exist_ok=True)
 
     # tabs doesn't need a page

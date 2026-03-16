@@ -5,9 +5,11 @@ import os
 import subprocess
 from datetime import datetime, timezone
 
-from core.config import config
-
-TEMP_DIR = os.path.join(config.agent_data_dir, "files", "temp")
+def _temp_dir():
+    from core.agent_state import get_active_agent
+    agent = get_active_agent()
+    data_dir = agent.data_dir if agent else "data"
+    return os.path.join(data_dir, "files", "temp")
 
 
 async def execute(
@@ -20,6 +22,7 @@ async def execute(
 ) -> str:
     import pyautogui
 
+    TEMP_DIR = _temp_dir()
     os.makedirs(TEMP_DIR, exist_ok=True)
 
     try:

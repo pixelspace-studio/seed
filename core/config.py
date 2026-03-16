@@ -1,6 +1,5 @@
-"""Semillita configuration — loads from .env + models.json."""
+"""Semillita configuration — loads from .env."""
 
-import json
 import os
 from dataclasses import dataclass, field
 from dotenv import load_dotenv
@@ -9,36 +8,19 @@ _SEED_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(_SEED_DIR, ".env"))
 
 
-def _load_models():
-    with open(os.path.join(_SEED_DIR, "registry", "models.json")) as f:
-        return json.load(f)
-
-
-def _context_for_model(model_id: str, models: dict) -> int:
-    """90% of model's context window, as a safe default."""
-    info = models.get(model_id, {})
-    ctx = info.get("context")
-    if ctx:
-        return int(ctx * 0.9)
-    return 180000
-
-
 @dataclass
 class Config:
     anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
     google_ai_api_key: str = os.getenv("GOOGLE_AI_API_KEY", "")  # Gemini models (AI Studio)
     google_api_key: str = os.getenv("GOOGLE_API_KEY", "")        # Other Google APIs (Maps, etc.)
-    model: str = "claude-sonnet-4-6"
     host: str = os.getenv("SEED_HOST", "localhost")
     port: int = int(os.getenv("SEED_PORT", "9999"))
     working_dir: str = _SEED_DIR
     seed_dir: str = _SEED_DIR
-    agent_name: str = "semillita"
-    agent_dir: str = os.path.join(_SEED_DIR, "agents", "semillita")
-    agent_data_dir: str = os.path.join(_SEED_DIR, "agents", "semillita", "data")
+    agents_dir: str = os.path.join(_SEED_DIR, "agents")
+    default_agent: str = "semillita"
     max_iterations: int = 25
-    max_context_tokens: int = 180000
     context_keep_recent: int = 10
     chars_per_token: float = 4.0
 
@@ -60,15 +42,3 @@ class Config:
 
 
 config = Config()
-
-# Load persisted model and set context window accordingly
-_model_file = os.path.join(config.agent_data_dir, ".model")
-os.makedirs(config.agent_data_dir, exist_ok=True)
-if os.path.exists(_model_file):
-    with open(_model_file) as f:
-        _saved = f.read().strip()
-    if _saved:
-        config.model = _saved
-
-_models = _load_models()
-config.max_context_tokens = _context_for_model(config.model, _models)

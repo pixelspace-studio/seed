@@ -63,30 +63,32 @@ def _format_event(data: dict, verbose: bool = True) -> str | None:
     """Format a WebSocket event for display. Returns None to skip."""
     s = lambda txt: _hex_to_ansi(_colors["system"], txt)
     t = data.get("type", "?")
+    agent = data.get("agent", "")
+    prefix = f"[{agent}] " if agent else ""
     if t == "tool_call":
         args_str = json.dumps(data.get("args", {}), ensure_ascii=False)
         if not verbose and len(args_str) > 120:
             args_str = args_str[:120] + "..."
-        return f"  {s(f'[{data["tool"]}]')} {args_str}"
+        return f"  {s(f'{prefix}[{data["tool"]}]')} {args_str}"
     elif t == "tool_result":
         result = data.get("result", "")
         if not verbose and len(result) > 200:
             result = result[:200] + "..."
-        return f"  {s(f'→ {result}')}"
+        return f"  {s(f'{prefix}→ {result}')}"
     elif t == "thinking":
-        return f"  {s(f'thinking... (iteration {data.get("iteration", "?")})')}"
+        return f"  {s(f'{prefix}thinking... (iteration {data.get("iteration", "?")})')}"
     elif t == "error":
-        return f"  {_hex_to_ansi('FF6B6B', f'error: {data.get("message", "?")}')}"
+        return f"  {_hex_to_ansi('FF6B6B', f'{prefix}error: {data.get("message", "?")}')}"
     elif t in ("injected", "response_complete", "idle", "message_received", "interrupted"):
         return None
     else:
-        return f"  {s(f'[{t}]')}"
+        return f"  {s(f'{prefix}[{t}]')}"
 
 
-def send_message(text: str):
+def send_message(text: str, agent: str = "semillita"):
     """Send a message and print the response (no verbose)."""
     try:
-        r = httpx.post(f"{BASE_URL}/message", json={"text": text}, timeout=300)
+        r = httpx.post(f"{BASE_URL}/agents/{agent}/message", json={"text": text}, timeout=300)
         r.raise_for_status()
         print(_colorize(r.json()["response"]))
     except httpx.ConnectError:
@@ -95,7 +97,7 @@ def send_message(text: str):
         print(f"Error: {e}")
 
 
-def send_message_verbose(text: str):
+def send_message_verbose(text: str, agent: str = "semillita"):
     """Send a message while streaming events via WebSocket."""
     import websockets
 
@@ -134,7 +136,7 @@ def send_message_verbose(text: str):
     time.sleep(0.2)
 
     try:
-        r = httpx.post(f"{BASE_URL}/message", json={"text": text}, timeout=300)
+        r = httpx.post(f"{BASE_URL}/agents/{agent}/message", json={"text": text}, timeout=300)
         r.raise_for_status()
         result = r.json()["response"]
     except httpx.ConnectError:
@@ -151,16 +153,16 @@ def send_message_verbose(text: str):
 def get_status():
     """Print current status."""
     try:
-        r = httpx.get(f"{BASE_URL}/status", timeout=5)
+        r = httpx.get(f"{BASE_URL}/agents", timeout=5)
         print(json.dumps(r.json(), indent=2))
     except httpx.ConnectError:
         print("Semillita is not running.")
 
 
 def stop():
-    """Send interrupt signal."""
+    """Send interrupt signal to default agent."""
     try:
-        r = httpx.post(f"{BASE_URL}/interrupt", timeout=5)
+        r = httpx.post(f"{BASE_URL}/agents/semillita/interrupt", timeout=5)
         print("Interrupt sent." if r.status_code == 200 else f"Error: {r.status_code}")
     except httpx.ConnectError:
         print("Semillita is not running.")
@@ -212,35 +214,23 @@ async def _chat_async(verbose: bool = True, model: str = None):
     import websockets
 
     # --- Kitty keyboard protocol ---
-    # Enables distinct escape sequences for modified keys (Shift+Enter, Ctrl+C, etc).
-    # Must deactivate on exit with ESC[<u or the terminal stays in Kitty mode.
     sys.stdout.write("\x1b[>1u")
     sys.stdout.flush()
 
-    # prompt_toolkit maps Shift+Enter to Keys.ControlM (= Enter) by default.
-    # We remap both known encodings to Keys.F24 (unused key) so we can bind it.
-    ANSI_SEQUENCES["\x1b[27;2;13~"] = Keys.F24   # xterm modifyOtherKeys encoding
-    ANSI_SEQUENCES["\x1b[13;2u"] = Keys.F24       # Kitty CSI u encoding
-    # Kitty protocol re-encodes ALL keys including Ctrl+C (99=ascii 'c', 5=ctrl modifier).
-    # Without this mapping, Ctrl+C shows as raw text "[99;5u" instead of interrupting.
+    ANSI_SEQUENCES["\x1b[27;2;13~"] = Keys.F24
+    ANSI_SEQUENCES["\x1b[13;2u"] = Keys.F24
     ANSI_SEQUENCES["\x1b[99;5u"] = Keys.ControlC
-    ANSI_SEQUENCES["\x1b[27u"] = Keys.Escape        # Kitty CSI u encoding for ESC
+    ANSI_SEQUENCES["\x1b[27u"] = Keys.Escape
 
     is_working = False
-    _ctrl_c_count = 0  # two Ctrl+C when idle = exit
+    _ctrl_c_count = 0
+    active_agent = "semillita"
     client = httpx.AsyncClient(base_url=BASE_URL, timeout=300)
 
     def _cprint(text):
-        """Print colored text through prompt_toolkit's renderer.
-
-        Regular print() inside patch_stdout() mangles ESC bytes (shows as ?[).
-        print_formatted_text(ANSI(...)) routes output through prompt_toolkit's
-        own VT100 renderer, which handles escape sequences correctly.
-        """
         ptprint(ANSI(text))
 
     def _refresh_prompt():
-        """Force prompt redraw (updates inject>/you> when state changes)."""
         app = get_app_or_none()
         if app:
             app.invalidate()
@@ -248,34 +238,30 @@ async def _chat_async(verbose: bool = True, model: str = None):
     # --- Key bindings ---
     kb = KeyBindings()
 
-    @kb.add(Keys.F24)             # Shift+Enter — newline
+    @kb.add(Keys.F24)
     def _newline(event):
         event.current_buffer.insert_text('\n')
 
-    @kb.add('escape')  # ESC — interrupt current work
+    @kb.add('escape')
     def _escape(event):
         if is_working:
             asyncio.ensure_future(_send_interrupt())
 
     async def _send_interrupt():
         try:
-            await client.post("/interrupt", timeout=5)
+            await client.post(f"/agents/{active_agent}/interrupt", timeout=5)
         except Exception:
             pass
 
-    # Dynamic prompt: prompt_async() accepts a callable, so it re-evaluates
-    # on every redraw. Combined with app.invalidate() in _refresh_prompt(),
-    # the prompt updates from >> to > when Semillita finishes working.
     def _get_prompt():
         from prompt_toolkit.formatted_text import HTML
         h = _colors["user"]
-        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
         sym = '>>' if is_working else '>'
-        return HTML(f'<style fg="#{h}">{sym} </style>')
+        return HTML(f'<style fg="#{h}">{active_agent}{sym} </style>')
 
     pt = PromptSession(key_bindings=kb)
 
-    # --- WebSocket listener (prints events in real-time) ---
+    # --- WebSocket listener ---
     async def ws_listener():
         nonlocal is_working
         while True:
@@ -299,13 +285,13 @@ async def _chat_async(verbose: bool = True, model: str = None):
             except asyncio.CancelledError:
                 return
             except Exception:
-                await asyncio.sleep(1)  # reconnect
+                await asyncio.sleep(1)
 
     # --- Send /message in background ---
     async def send_msg(text):
         nonlocal is_working
         try:
-            r = await client.post("/message", json={"text": text})
+            r = await client.post(f"/agents/{active_agent}/message", json={"text": text})
             r.raise_for_status()
             result = r.json().get("response", "")
             _cprint(f"\n{_colorize(result)}\n")
@@ -325,17 +311,17 @@ async def _chat_async(verbose: bool = True, model: str = None):
         _version = "?"
     print(f"Semillita v{_version}")
     print("  Enter = send | Shift+Enter = newline | ESC = interrupt")
-    print("  Commands: /model, /color, /verbose on|off, exit\n")
-
-    _models_json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "registry", "models.json")
+    print("  Commands: /model, /agent, /agents, /color, /verbose on|off, exit\n")
 
     async def _pick_model(out=print):
-        """Interactive model picker. Returns True if model was switched."""
+        """Interactive model picker using GET /models."""
         try:
-            r = await client.get("/status", timeout=5)
+            # Get current agent status for current model
+            r = await client.get(f"/agents/{active_agent}/status", timeout=5)
             current = r.json().get("model", "?")
-            with open(_models_json_path) as mf:
-                all_models = json.load(mf)
+            # Get models from API
+            r = await client.get("/models", timeout=5)
+            all_models = r.json()
             text_models = [
                 (mid, m["name"]) for mid, m in all_models.items()
                 if "text" in m.get("capabilities", [])
@@ -349,7 +335,11 @@ async def _chat_async(verbose: bool = True, model: str = None):
             if choice and choice.isdigit():
                 idx = int(choice) - 1
                 if 0 <= idx < len(text_models):
-                    r = await client.post("/model", json={"text": text_models[idx][0]}, timeout=5)
+                    r = await client.post(
+                        f"/agents/{active_agent}/model",
+                        json={"text": text_models[idx][0]},
+                        timeout=5,
+                    )
                     r.raise_for_status()
                     out(f"  {r.json().get('result', '')}")
                     return True
@@ -366,7 +356,11 @@ async def _chat_async(verbose: bool = True, model: str = None):
             await _pick_model()
         else:
             try:
-                r = await client.post("/model", json={"text": model}, timeout=5)
+                r = await client.post(
+                    f"/agents/{active_agent}/model",
+                    json={"text": model},
+                    timeout=5,
+                )
                 r.raise_for_status()
                 print(f"  {r.json().get('result', '')}\n")
             except httpx.ConnectError:
@@ -376,7 +370,7 @@ async def _chat_async(verbose: bool = True, model: str = None):
                 print(f"  Model switch error: {e}\n")
 
     ws_task = asyncio.create_task(ws_listener())
-    await asyncio.sleep(0.3)  # let WS connect
+    await asyncio.sleep(0.3)
 
     try:
         with patch_stdout():
@@ -404,11 +398,45 @@ async def _chat_async(verbose: bool = True, model: str = None):
                         await _pick_model(out=_cprint)
                         continue
 
+                    # /agents command — list all agents
+                    if text.lower() == "/agents":
+                        try:
+                            r = await client.get("/agents", timeout=5)
+                            r.raise_for_status()
+                            agents_list = r.json()
+                            _cprint("  Agents:")
+                            for a in agents_list:
+                                marker = " *" if a["name"] == active_agent else ""
+                                _cprint(f"    {a['name']}: {a['status']} ({a['model']}){marker}")
+                        except Exception as e:
+                            _cprint(f"  Error: {e}")
+                        continue
+
+                    # /agent command — switch active agent
+                    if text.lower().startswith("/agent"):
+                        parts = text.split()
+                        if len(parts) == 1:
+                            _cprint(f"  Active agent: {active_agent}")
+                        else:
+                            new_agent = parts[1]
+                            # Verify agent exists
+                            try:
+                                r = await client.get(f"/agents/{new_agent}/status", timeout=5)
+                                r.raise_for_status()
+                                if "error" in r.json():
+                                    _cprint(f"  Unknown agent: {new_agent}")
+                                else:
+                                    active_agent = new_agent
+                                    _cprint(f"  Switched to {active_agent}")
+                                    _refresh_prompt()
+                            except Exception as e:
+                                _cprint(f"  Error: {e}")
+                        continue
+
                     # /color command — interactive or direct
                     if text.lower().startswith("/color"):
                         parts = text.split()
                         if len(parts) == 1:
-                            # Interactive: show current colors, prompt for each
                             for role in ("system", "seed", "user"):
                                 current = _colors[role]
                                 sample = _hex_to_ansi(current, f"{role}: #{current}")
@@ -423,7 +451,6 @@ async def _chat_async(verbose: bool = True, model: str = None):
                             for role in ("system", "seed", "user"):
                                 _cprint(f"  {_hex_to_ansi(_colors[role], f'{role}: #{_colors[role]}')}")
                         elif len(parts) == 3:
-                            # Direct: /color seed FF005A
                             role = parts[1].lower()
                             c = parts[2].lstrip("#")
                             if role in _colors and len(c) == 6 and all(ch in "0123456789abcdefABCDEF" for ch in c):
@@ -436,13 +463,15 @@ async def _chat_async(verbose: bool = True, model: str = None):
                         continue
 
                     if is_working:
-                        # Inject into current loop
                         try:
-                            await client.post("/inject", json={"text": text}, timeout=5)
+                            await client.post(
+                                f"/agents/{active_agent}/inject",
+                                json={"text": text},
+                                timeout=5,
+                            )
                         except Exception as e:
                             _cprint(f"  inject error: {e}")
                     else:
-                        # Send as new message (non-blocking)
                         is_working = True
                         asyncio.create_task(send_msg(text))
                         await asyncio.sleep(0.05)
@@ -458,7 +487,6 @@ async def _chat_async(verbose: bool = True, model: str = None):
     finally:
         ws_task.cancel()
         await client.aclose()
-        # Deactivate Kitty keyboard protocol
         sys.stdout.write("\x1b[<u")
         sys.stdout.flush()
 
