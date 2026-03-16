@@ -25,10 +25,15 @@ async def run(
         if event_sink:
             event_sink(event)
 
-    # Load system prompt
-    prompt_path = os.path.join(config.seed_dir, "agents", "semillita", "prompt.md")
-    with open(prompt_path, "r") as f:
-        system_prompt = f.read()
+    # Load system prompt (identity + protocol)
+    agent_dir = os.path.join(config.seed_dir, "agents", "semillita")
+    parts = []
+    for f_name in ("identity.md", "protocol.md"):
+        f_path = os.path.join(agent_dir, f_name)
+        if os.path.exists(f_path):
+            with open(f_path, "r") as f:
+                parts.append(f.read())
+    system_prompt = "\n\n---\n\n".join(parts)
 
     # Build messages: history + new message
     messages = session.get_context(cfg=config)
