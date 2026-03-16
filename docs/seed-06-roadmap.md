@@ -6,6 +6,12 @@ The guiding principle: **build the minimum core so Semillita can improve herself
 
 ---
 
+## Current deployment model
+
+Semillita runs on a **Mac Mini** as a persistent local agent. Future deployment: a **VM in the cloud** (AWS, Azure, GCP) with the Mac Mini as an operational node via Tailscale.
+
+---
+
 ## 1. Fix What's Broken
 
 Before new features, fix the issues from the [code review](seed-05-code-review-2026-03-15.md):
@@ -27,7 +33,6 @@ The browser and computer tools are the weakest part right now. Without reliable 
 - Fix the broken execute function in browser.py
 - Improve session management (stale session cleanup, port allocation)
 - Add cookie/localStorage persistence across calls
-- Investigate headless vs real Chrome tradeoffs
 - Add skill docs (markdown instructions for the agent on how to use browser effectively)
 
 ### Computer Use
@@ -115,11 +120,11 @@ Current state: sliding context window only. No long-term memory.
 
 ## 5. Identity and Soul
 
-Current state: single `prompt.md` file defines everything.
+Current state: single `prompt.md` file in `agents/semillita/`.
 
 ### Proposed split
 ```
-identity/
+agents/semillita/
 ├── identity.md      # Who is Semillita? Name, personality, values, voice.
 ├── purpose.md       # What is her mission? What does she care about?
 ├── boundaries.md    # What she won't do. Safety, ethics, limits.
@@ -140,17 +145,19 @@ Tools are code (Python functions). Skills are knowledge (markdown instructions o
 
 ### Structure
 ```
-skills/
-├── browser.md       # How to use browser tool: navigation patterns, waiting, error recovery
-├── computer.md      # How to use computer tool: click targets, screenshot-verify loops
-├── coding.md        # How to write and test code: patterns, languages, debugging
-├── research.md      # How to search and synthesize information from the web
-└── communication.md # How to talk to humans: tone, clarity, when to ask vs act
+core/skills/               # Protected, we maintain
+├── browser.md             # How to use browser tool
+├── computer.md            # How to use computer tool
+└── research.md            # How to search and synthesize info
+
+agents/shared/skills/      # Agent-created, shared between agents
+├── coding.md              # Patterns the agent learned
+└── communication.md       # How to talk to humans
 ```
 
 ### How it works
 - Skills are loaded into system prompt (or injected on demand)
-- Agent can create new skills (`tools/` pattern but for `skills/`)
+- Agent can create new skills in `agents/shared/skills/`
 - Skills reference tools: "when you need to click a button, use the computer tool with action=click"
 - Skills are living documents — agent can improve them over time
 
@@ -184,7 +191,8 @@ Agent A ←→ Agent B ←→ Agent C
 ### Implementation ideas
 - Each agent is a separate `loop.py` instance with its own session and registry
 - Agents communicate via the existing `/message` and `/inject` endpoints
-- Shared memory layer for coordination
+- Shared tools and skills live in `agents/shared/`
+- Each agent's identity lives in `agents/{name}/`
 - Start with Option A (simpler) — one orchestrator that spawns sub-loops
 
 ---
@@ -193,7 +201,7 @@ Agent A ←→ Agent B ←→ Agent C
 
 Voice synthesis for Semillita's responses.
 
-- [ ] `core_tools/speak.py` — send text to ElevenLabs, save audio to `data/artifacts/`
+- [ ] `core/tools/speak.py` — send text to ElevenLabs, save audio to `data/files/out/`
 - [ ] Voice selection and configuration
 - [ ] Streaming audio (play while generating)
 - [ ] Integration with gateway (voice messages on WhatsApp/Telegram)
@@ -219,19 +227,18 @@ Semillita should be able to act on her own — not just respond to messages.
 ### Calendar
 - Simple calendar awareness: knows today's date, can store and query events
 - `data/calendar.jsonl` — structured events with date, time, description
-- `core_tools/calendar.py` — add, list, search events
+- `core/tools/calendar.py` — add, list, search events
 - Feeds into heartbeat: "you have a meeting in 30 minutes"
 
 ### Tasks
 - Persistent task list the agent manages herself
 - `data/tasks.jsonl` — structured tasks with status, priority, due date
-- `core_tools/tasks.py` — create, update, complete, list tasks
+- `core/tools/tasks.py` — create, update, complete, list tasks
 - Agent reviews tasks on heartbeat and can prioritize her own work
 
 ---
 
 ## 10. MCP (Model Context Protocol)
-
 
 Two directions:
 
@@ -286,15 +293,14 @@ Current state: API keys in plain text `.env` file. Works but insecure.
 ### Strategy: cascading resolution
 
 `config.py` resolves each secret in order:
-1. **Environment variables** — works everywhere (cloud dashboards, Docker, CI)
+1. **Environment variables** — works everywhere (VMs, Docker, CI)
 2. **macOS Keychain** — when running local on Mac (via `keyring` library)
 3. **`.env` file** — fallback for development
 
-### Why this order
-- Cloud (Render, Railway, Fly): secrets go in the provider's dashboard → injected as env vars
-- Mac Mini local: `./seed.sh config` saves to Keychain, encrypted with user login
-- Development: `.env` file, gitignored
-- No vendor lock-in, no paid services required
+### Deployment scenarios
+- **Mac Mini (today):** `./seed.sh config` saves to Keychain, encrypted with user login
+- **Cloud VM (AWS/Azure/GCP):** secrets set as env vars on the VM or via the cloud provider's secret manager (AWS Secrets Manager, GCP Secret Manager, Azure Key Vault) — all inject as env vars
+- **Development:** `.env` file, gitignored
 
 ### Implementation
 - [ ] Add `keyring` to requirements.txt
@@ -305,8 +311,20 @@ Current state: API keys in plain text `.env` file. Works but insecure.
 ### Alternatives considered
 - **1Password CLI** (`op`) — great DX but requires paid subscription
 - **Bitwarden** — open source, self-hosteable, but extra setup
-- **HashiCorp Vault** — enterprise, overkill
+- **HashiCorp Vault** — enterprise, overkill for now
 - **SOPS/age** — encrypts .env in git, but adds key management complexity
+
+---
+
+## TBD / Far Future
+
+Ideas captured but not prioritized:
+
+- **Web UI** — browser-based chat interface (TBD — CLI is primary)
+- **Mobile access** — talk to Semillita from phone (depends on gateway)
+- **PaaS deployment** (Render, Railway, Fly) — possible but not priority. VMs are the target.
+- **Tool sandboxing** — run agent-created tools in isolated subprocesses
+- **Distributed tracing** — structured logging and observability
 
 ---
 
@@ -320,6 +338,7 @@ Current state: API keys in plain text `.env` file. Works but insecure.
 6. **Skills system** — agent knows how to use her own tools
 7. **Gateway** — connects to the world
 8. **ElevenLabs** — voice
-8. **Multi-agent** — scaling
-9. **MCP** — interoperability
-10. **CLI + API polish** — ongoing
+9. **Multi-agent** — scaling
+10. **MCP** — interoperability
+11. **Secrets management** — security hardening
+12. **CLI + API polish** — ongoing
