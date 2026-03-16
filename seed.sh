@@ -240,21 +240,21 @@ case "${1:-help}" in
       echo "  Already running (PID $(cat .pid))"
       exit 0
     fi
-    mkdir -p data
+    mkdir -p agents/semillita/data
     echo "  Starting Seed..."
-    nohup .venv/bin/python main.py > data/server.log 2>&1 &
+    nohup .venv/bin/python main.py > agents/semillita/agents/semillita/data/server.log 2>&1 &
     echo $! > .pid
     sleep 2
     if kill -0 "$(cat .pid)" 2>/dev/null; then
       echo ""
       echo "  Semillita is awake (PID $(cat .pid))"
-      echo "  Log: data/server.log"
+      echo "  Log: agents/semillita/data/server.log"
       echo ""
       echo "  Chat:  ./seed.sh chat"
       echo "  Stop:  ./seed.sh stop"
       echo ""
     else
-      echo "  Failed to start. Check data/server.log"
+      echo "  Failed to start. Check agents/semillita/data/server.log"
       rm -f .pid
       exit 1
     fi

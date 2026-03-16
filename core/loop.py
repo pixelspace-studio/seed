@@ -25,14 +25,16 @@ async def run(
         if event_sink:
             event_sink(event)
 
-    # Load system prompt (identity + protocol)
-    agent_dir = os.path.join(config.seed_dir, "agents", "semillita")
+    # Load system prompt: shared protocol + agent identity
     parts = []
-    for f_name in ("identity.md", "protocol.md"):
-        f_path = os.path.join(agent_dir, f_name)
-        if os.path.exists(f_path):
-            with open(f_path, "r") as f:
-                parts.append(f.read())
+    shared_protocol = os.path.join(config.seed_dir, "agents", "shared", "protocol.md")
+    if os.path.exists(shared_protocol):
+        with open(shared_protocol, "r") as f:
+            parts.append(f.read())
+    identity = os.path.join(config.agent_dir, "identity.md")
+    if os.path.exists(identity):
+        with open(identity, "r") as f:
+            parts.append(f.read())
     system_prompt = "\n\n---\n\n".join(parts)
 
     # Build messages: history + new message
@@ -74,7 +76,7 @@ async def run(
                     break
 
         # Check reload flag
-        reload_flag = os.path.join(config.seed_dir, "data", ".reload_flag")
+        reload_flag = os.path.join(config.agent_data_dir, ".reload_flag")
         if os.path.exists(reload_flag):
             os.remove(reload_flag)
             registry.reload_custom()

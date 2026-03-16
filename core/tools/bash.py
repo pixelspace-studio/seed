@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from core.config import config
 
 MAX_OUTPUT = 100 * 1024  # 100KB
-AUDIT_LOG = os.path.join(config.seed_dir, "data", "audit.jsonl")
+AUDIT_LOG = os.path.join(config.agent_data_dir, "audit.jsonl")
 
 
 def _audit(command: str, exit_code: int | None, duration_ms: float, truncated: bool = False, error: str = None):

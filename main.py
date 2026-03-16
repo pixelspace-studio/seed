@@ -18,7 +18,7 @@ from core.loop import run
 app = FastAPI(title="Semillita", version="0.1")
 
 # --- State ---
-session = Session(data_dir="data")
+session = Session(data_dir=config.agent_data_dir)
 registry = Registry(seed_dir=config.seed_dir)
 status = {"state": "idle"}
 interrupt_event = asyncio.Event()

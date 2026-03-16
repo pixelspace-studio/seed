@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from core.config import config
 
-TEMP_DIR = os.path.join(config.seed_dir, "data", "files", "temp")
+TEMP_DIR = os.path.join(config.agent_data_dir, "files", "temp")
 
 
 async def execute(

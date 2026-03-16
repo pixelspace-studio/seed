@@ -12,8 +12,8 @@ from datetime import datetime, timezone
 
 from core.config import config
 
-TEMP_DIR = os.path.join(config.seed_dir, "data", "files", "temp")
-SESSIONS_FILE = os.path.join(config.seed_dir, "data", "browser_sessions.json")
+TEMP_DIR = os.path.join(config.agent_data_dir, "files", "temp")
+SESSIONS_FILE = os.path.join(config.agent_data_dir, "browser_sessions.json")
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
 
 # Base port for CDP — each session gets base + offset

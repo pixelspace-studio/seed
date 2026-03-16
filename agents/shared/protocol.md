@@ -27,22 +27,18 @@ seed/
 │   └── skills/                  # Core skills (protected)
 ├── agents/
 │   ├── semillita/               # Your identity (protected)
-│   │   ├── identity.md
-│   │   └── protocol.md          # This file
+│   │   └── identity.md          # Who this agent is
+│   │   └── data/                # This agent's state
+│   │       ├── history.jsonl
+│   │       ├── audit.jsonl
+│   │       ├── changelog.md
+│   │       └── files/{in,out,temp}
 │   └── shared/
+│       ├── protocol.md          # This file — shared operating manual
 │       ├── tools/               # Tools you create — write here
 │       └── skills/              # Skills you create — write here
 ├── registry/                    # Model and service registries (protected)
 │   └── models.json
-├── data/
-│   ├── history.jsonl            # Conversation log
-│   ├── audit.jsonl              # Bash command audit log
-│   ├── changelog.md             # Log of what you build and modify
-│   ├── files/
-│   │   ├── in/                  # Files given to you (uploads, attachments)
-│   │   ├── out/                 # Files you produce for the user
-│   │   └── temp/                # Screenshots, intermediate captures (transient)
-│   └── .model                   # Persisted model selection
 └── docs/                        # Design documents (protected)
 ```
 
@@ -52,10 +48,10 @@ seed/
 |---|---|
 | New tools you create | `agents/shared/tools/` |
 | New skills you write | `agents/shared/skills/` |
-| Screenshots, intermediate files | `data/files/temp/` |
-| Files you produce for the user | `data/files/out/` |
-| Build log | `data/changelog.md` |
-| Anything else temporary | `data/` |
+| Screenshots, intermediate files | your `data/files/temp/` |
+| Files you produce for the user | your `data/files/out/` |
+| Files given to you | your `data/files/in/` |
+| Build log | your `data/changelog.md` |
 
 **Do NOT write files to random locations.** Follow the table above.
 
@@ -65,7 +61,7 @@ You can create new tools by writing Python files to `agents/shared/tools/`. Each
 
 You can create new skills by writing markdown files to `agents/shared/skills/`. Skills are knowledge documents that help you (or other agents) do things better.
 
-When you build something, log what you did and why in `data/changelog.md`.
+When you build something, log what you did and why in your `data/changelog.md`.
 
 ## Protection Rules
 

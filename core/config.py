@@ -34,6 +34,9 @@ class Config:
     port: int = int(os.getenv("SEED_PORT", "9999"))
     working_dir: str = _SEED_DIR
     seed_dir: str = _SEED_DIR
+    agent_name: str = "semillita"
+    agent_dir: str = os.path.join(_SEED_DIR, "agents", "semillita")
+    agent_data_dir: str = os.path.join(_SEED_DIR, "agents", "semillita", "data")
     max_iterations: int = 25
     max_context_tokens: int = 180000
     context_keep_recent: int = 10
@@ -43,9 +46,9 @@ class Config:
         "main.py",
         "cli.py",
         "core/",
-        "core/tools/",
         "registry/",
-        "agents/",
+        "agents/semillita/identity.md",
+        "docs/",
     ])
 
     def is_protected(self, path: str) -> bool:
@@ -59,7 +62,8 @@ class Config:
 config = Config()
 
 # Load persisted model and set context window accordingly
-_model_file = os.path.join(_SEED_DIR, "data", ".model")
+_model_file = os.path.join(config.agent_data_dir, ".model")
+os.makedirs(config.agent_data_dir, exist_ok=True)
 if os.path.exists(_model_file):
     with open(_model_file) as f:
         _saved = f.read().strip()

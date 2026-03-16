@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from core.config import config
 
-CHANGELOG_PATH = os.path.join(config.seed_dir, "data", "changelog.md")
+CHANGELOG_PATH = os.path.join(config.agent_data_dir, "changelog.md")
 
 
 def _log_change(path: str, action: str):
@@ -40,7 +40,7 @@ async def execute(path: str, content: str) -> str:
         _log_change(rel, action)
 
         # Signal that registry should reload (checked by the loop)
-        flag_path = os.path.join(config.seed_dir, "data", ".reload_flag")
+        flag_path = os.path.join(config.agent_data_dir, ".reload_flag")
         with open(flag_path, "w") as f:
             f.write("1")
 
