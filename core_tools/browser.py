@@ -10,7 +10,7 @@ import os
 import subprocess
 from datetime import datetime, timezone
 
-from config import config
+from core.config import config
 
 ARTIFACTS_DIR = os.path.join(config.seed_dir, "data", "artifacts")
 SESSIONS_FILE = os.path.join(config.seed_dir, "data", "browser_sessions.json")

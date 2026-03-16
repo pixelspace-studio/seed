@@ -1,6 +1,6 @@
 """Core tool: set_config — change runtime configuration."""
 
-from config import config
+from core.config import config
 
 # Which config fields can be changed at runtime, with their types
 MUTABLE = {

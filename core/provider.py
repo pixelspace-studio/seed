@@ -33,7 +33,7 @@ def _get_provider(model: str) -> str:
     import os
     global MODELS_PATH
     if not MODELS_PATH:
-        MODELS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models.json")
+        MODELS_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "registry", "models.json")
     with open(MODELS_PATH) as f:
         models = json.load(f)
     info = models.get(model, {})

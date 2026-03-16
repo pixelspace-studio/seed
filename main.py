@@ -10,10 +10,10 @@ from pydantic import BaseModel
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-from config import config
-from session import Session
-from registry import Registry
-from loop import run
+from core.config import config
+from core.session import Session
+from core.registry import Registry
+from core.loop import run
 
 app = FastAPI(title="Semillita", version="0.1")
 

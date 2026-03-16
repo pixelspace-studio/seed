@@ -2,7 +2,7 @@
 
 import os
 
-from config import config
+from core.config import config
 
 
 async def execute(path: str, offset: int = 0, limit: int = 2000) -> str:

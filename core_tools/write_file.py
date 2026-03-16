@@ -3,7 +3,7 @@
 import os
 from datetime import datetime, timezone
 
-from config import config
+from core.config import config
 
 CHANGELOG_PATH = os.path.join(config.seed_dir, "data", "changelog.md")
 

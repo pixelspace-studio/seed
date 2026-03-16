@@ -7,9 +7,9 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 
-from config import config
+from core.config import config
 
-MODELS_PATH = os.path.join(config.seed_dir, "models.json")
+MODELS_PATH = os.path.join(config.seed_dir, "registry", "models.json")
 
 
 def _load_models():

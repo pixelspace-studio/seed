@@ -6,7 +6,7 @@ import signal
 import subprocess
 from datetime import datetime, timezone
 
-from config import config
+from core.config import config
 
 MAX_OUTPUT = 100 * 1024  # 100KB
 AUDIT_LOG = os.path.join(config.seed_dir, "data", "audit.jsonl")

@@ -5,13 +5,12 @@ import os
 from dataclasses import dataclass, field
 from dotenv import load_dotenv
 
-load_dotenv()
-
-_SEED_DIR = os.path.dirname(os.path.abspath(__file__))
+_SEED_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(_SEED_DIR, ".env"))
 
 
 def _load_models():
-    with open(os.path.join(_SEED_DIR, "models.json")) as f:
+    with open(os.path.join(_SEED_DIR, "registry", "models.json")) as f:
         return json.load(f)
 
 
@@ -42,14 +41,11 @@ class Config:
 
     protected_paths: list[str] = field(default_factory=lambda: [
         "main.py",
-        "loop.py",
-        "registry.py",
-        "provider.py",
-        "session.py",
-        "config.py",
         "cli.py",
-        "mcp.py",
+        "core/",
         "core_tools/",
+        "registry/",
+        "agents/",
     ])
 
     def is_protected(self, path: str) -> bool:

@@ -3,9 +3,9 @@
 import json
 import os
 
-from config import config
+from core.config import config
 
-MODELS_PATH = os.path.join(config.seed_dir, "models.json")
+MODELS_PATH = os.path.join(config.seed_dir, "registry", "models.json")
 
 
 

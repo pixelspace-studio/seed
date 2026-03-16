@@ -6,7 +6,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 
-from config import config
+from core.config import config
 
 BRAVE_API_KEY = os.getenv("BRAVE_SEARCH_API_KEY", "")
 

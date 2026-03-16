@@ -4,10 +4,10 @@ import asyncio
 import os
 from typing import Callable
 
-from config import config
-from registry import Registry
-from session import Session
-from provider import send as provider_send
+from core.config import config
+from core.registry import Registry
+from core.session import Session
+from core.provider import send as provider_send
 
 
 async def run(
@@ -26,7 +26,7 @@ async def run(
             event_sink(event)
 
     # Load system prompt
-    prompt_path = os.path.join(config.seed_dir, "prompt.md")
+    prompt_path = os.path.join(config.seed_dir, "agents", "semillita", "prompt.md")
     with open(prompt_path, "r") as f:
         system_prompt = f.read()
 

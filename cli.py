@@ -327,7 +327,7 @@ async def _chat_async(verbose: bool = True, model: str = None):
     print("  Enter = send | Shift+Enter = newline | ESC = interrupt")
     print("  Commands: /model, /color, /verbose on|off, exit\n")
 
-    _models_json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models.json")
+    _models_json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "registry", "models.json")
 
     async def _pick_model(out=print):
         """Interactive model picker. Returns True if model was switched."""
