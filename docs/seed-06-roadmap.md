@@ -200,7 +200,38 @@ Voice synthesis for Semillita's responses.
 
 ---
 
-## 9. MCP (Model Context Protocol)
+## 9. Autonomy: Heartbeat, Scheduler, Calendar, Tasks
+
+Semillita should be able to act on her own — not just respond to messages.
+
+### Heartbeat
+- Periodic wake-up (every N minutes) where Semillita checks if there's anything she should do
+- Review pending tasks, check calendar, process queued actions
+- Configurable interval via `set_config` or `data/.heartbeat`
+- Implementation: background async loop in `main.py` that calls `/message` with a system prompt like "check your tasks and calendar"
+
+### Scheduler (Cron-like)
+- Schedule actions at specific timestamps: "at 9am tomorrow, send me a summary"
+- Persistent schedule stored in `data/schedule.jsonl`
+- Agent can create/list/delete scheduled items via a `schedule` tool
+- Runner checks schedule on each heartbeat tick
+
+### Calendar
+- Simple calendar awareness: knows today's date, can store and query events
+- `data/calendar.jsonl` — structured events with date, time, description
+- `core_tools/calendar.py` — add, list, search events
+- Feeds into heartbeat: "you have a meeting in 30 minutes"
+
+### Tasks
+- Persistent task list the agent manages herself
+- `data/tasks.jsonl` — structured tasks with status, priority, due date
+- `core_tools/tasks.py` — create, update, complete, list tasks
+- Agent reviews tasks on heartbeat and can prioritize her own work
+
+---
+
+## 10. MCP (Model Context Protocol)
+
 
 Two directions:
 
@@ -216,7 +247,7 @@ Two directions:
 
 ---
 
-## 10. CLI Improvements
+## 11. CLI Improvements
 
 - [ ] Persistent color scheme (save to `data/.colors`)
 - [ ] `/history` command to browse past conversations
@@ -228,7 +259,7 @@ Two directions:
 
 ---
 
-## 11. API Completeness
+## 12. API Completeness
 
 Ensure all agent capabilities are accessible via HTTP:
 
@@ -253,10 +284,11 @@ Ensure all agent capabilities are accessible via HTTP:
 1. **Fix what's broken** — browser, max_tokens, validations
 2. **Browser and computer use** — most impactful for agent capability
 3. **Memory system** — enables learning and continuity
-4. **Identity split** — cleaner soul definition
-5. **Skills system** — agent knows how to use her own tools
-6. **Gateway** — connects to the world
-7. **ElevenLabs** — voice
+4. **Autonomy** — heartbeat, scheduler, calendar, tasks
+5. **Identity split** — cleaner soul definition
+6. **Skills system** — agent knows how to use her own tools
+7. **Gateway** — connects to the world
+8. **ElevenLabs** — voice
 8. **Multi-agent** — scaling
 9. **MCP** — interoperability
 10. **CLI + API polish** — ongoing
