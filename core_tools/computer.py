@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from core.config import config
 
-ARTIFACTS_DIR = os.path.join(config.seed_dir, "data", "artifacts")
+TEMP_DIR = os.path.join(config.seed_dir, "data", "files", "temp")
 
 
 async def execute(
@@ -20,12 +20,12 @@ async def execute(
 ) -> str:
     import pyautogui
 
-    os.makedirs(ARTIFACTS_DIR, exist_ok=True)
+    os.makedirs(TEMP_DIR, exist_ok=True)
 
     try:
         if action == "screenshot":
             ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-            path = os.path.join(ARTIFACTS_DIR, f"screen-{ts}.png")
+            path = os.path.join(TEMP_DIR, f"screen-{ts}.png")
             img = pyautogui.screenshot()
             img.save(path)
             return f"Screenshot saved: {path}"

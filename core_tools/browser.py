@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 from core.config import config
 
-ARTIFACTS_DIR = os.path.join(config.seed_dir, "data", "artifacts")
+TEMP_DIR = os.path.join(config.seed_dir, "data", "files", "temp")
 SESSIONS_FILE = os.path.join(config.seed_dir, "data", "browser_sessions.json")
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
 
@@ -135,7 +135,7 @@ async def execute(
     timeout: int = 15000,
     session: str = "default",
 ) -> str:
-    os.makedirs(ARTIFACTS_DIR, exist_ok=True)
+    os.makedirs(TEMP_DIR, exist_ok=True)
 
     # tabs doesn't need a page
     if action == "tabs":
@@ -221,7 +221,7 @@ async def execute(
 
         elif action == "screenshot":
             ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-            path = os.path.join(ARTIFACTS_DIR, f"browser-{session}-{ts}.png")
+            path = os.path.join(TEMP_DIR, f"browser-{session}-{ts}.png")
             await page.screenshot(path=path)
             return f"Screenshot saved: {path}"
 
