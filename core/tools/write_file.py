@@ -35,7 +35,7 @@ async def execute(path: str, content: str) -> str:
 
     # Log changes to tools/ or prompt.md
     rel = os.path.relpath(path, config.seed_dir)
-    if rel.startswith("tools/") or rel == "prompt.md":
+    if rel.startswith("agents/shared/tools/") or rel.startswith("agents/") and rel.endswith("prompt.md"):
         action = "created" if not os.path.exists(path) else "modified"
         _log_change(rel, action)
 

@@ -142,7 +142,7 @@ async def post_inject(req: MessageRequest):
 @app.post("/model")
 async def post_model(req: MessageRequest):
     """Switch model at runtime. Accepts aliases (sonnet, opus) or full IDs."""
-    from core_tools.switch_model import execute as switch_execute
+    from core.tools.switch_model import execute as switch_execute
     result = await switch_execute(req.text)
     return {"ok": True, "result": result}
 

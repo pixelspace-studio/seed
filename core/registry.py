@@ -1,4 +1,4 @@
-"""Tool registry — discovers and loads tools from core_tools/ and tools/."""
+"""Tool registry — discovers and loads tools from core/tools/ and agents/shared/tools/."""
 
 import importlib
 import importlib.util
@@ -9,8 +9,8 @@ import sys
 class Registry:
     def __init__(self, seed_dir: str):
         self.seed_dir = seed_dir
-        self.core_dir = os.path.join(seed_dir, "core_tools")
-        self.custom_dir = os.path.join(seed_dir, "tools")
+        self.core_dir = os.path.join(seed_dir, "core", "tools")
+        self.custom_dir = os.path.join(seed_dir, "agents", "shared", "tools")
         self._tools: dict[str, dict] = {}
 
     def _load_from_dir(self, directory: str) -> dict[str, dict]:

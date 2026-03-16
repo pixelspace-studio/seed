@@ -43,7 +43,7 @@ class Config:
         "main.py",
         "cli.py",
         "core/",
-        "core_tools/",
+        "core/tools/",
         "registry/",
         "agents/",
     ])
