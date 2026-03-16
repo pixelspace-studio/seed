@@ -12,14 +12,14 @@ from pydantic import BaseModel
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 from core.config import config
-from core.agent_state import AgentState, discover_agents, create_agent, _context_for_model
+from core.agent_state import discover_agents, create_agent, _context_for_model
+from core.state import agents
 from core.registry import Registry
 from core.loop import run
 
 app = FastAPI(title="Semillita", version="0.1")
 
 # --- State ---
-agents: dict[str, AgentState] = {}
 registry = Registry(seed_dir=config.seed_dir)
 
 

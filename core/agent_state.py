@@ -33,7 +33,7 @@ def _context_for_model(model_id: str, models: dict) -> int:
 def get_active_agent():
     """Get the currently working agent, or fall back to default."""
     from core.config import config
-    from main import agents
+    from core.state import agents
     for agent in agents.values():
         if agent.status.get("state") == "working":
             return agent

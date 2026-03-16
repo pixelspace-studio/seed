@@ -22,7 +22,7 @@ def _recommended_context(context_window):
 
 async def execute(model: str) -> str:
     """Switch the model for the calling agent. Finds agent via main.agents."""
-    from main import agents
+    from core.state import agents
 
     models = _load_models()
     resolved = model.strip()

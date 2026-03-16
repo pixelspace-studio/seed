@@ -4,7 +4,7 @@
 async def execute(name: str, identity: str, model: str = None) -> str:
     from core.config import config
     from core.agent_state import create_agent
-    from main import agents
+    from core.state import agents
 
     name = name.strip().lower()
 

@@ -2,7 +2,7 @@
 
 
 async def execute(agent: str, message: str) -> str:
-    from main import agents
+    from core.state import agents
     target = agents.get(agent)
     if not target:
         available = ", ".join(agents.keys())
