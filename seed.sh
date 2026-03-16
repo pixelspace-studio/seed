@@ -242,7 +242,7 @@ case "${1:-help}" in
     fi
     mkdir -p agents/semillita/data
     echo "  Starting Seed..."
-    nohup .venv/bin/python main.py > agents/semillita/agents/semillita/data/server.log 2>&1 &
+    nohup .venv/bin/python main.py > agents/semillita/data/server.log 2>&1 &
     echo $! > .pid
     sleep 2
     if kill -0 "$(cat .pid)" 2>/dev/null; then
