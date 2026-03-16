@@ -263,7 +263,7 @@ async def _chat_async(verbose: bool = True, model: str = None):
         sym = '>>' if is_working else '>'
         return HTML(f'<style fg="#{h}">{active_agent}{sym} </style>')
 
-    pt = PromptSession(key_bindings=kb)
+    pt = PromptSession(key_bindings=kb, mouse_support=True)
 
     # --- WebSocket listener ---
     async def ws_listener():
