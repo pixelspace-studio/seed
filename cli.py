@@ -59,18 +59,18 @@ def start():
     print("Starting Semillita...")
 
 
-def _format_event(data: dict) -> str | None:
+def _format_event(data: dict, verbose: bool = True) -> str | None:
     """Format a WebSocket event for display. Returns None to skip."""
     s = lambda txt: _hex_to_ansi(_colors["system"], txt)
     t = data.get("type", "?")
     if t == "tool_call":
         args_str = json.dumps(data.get("args", {}), ensure_ascii=False)
-        if len(args_str) > 120:
+        if not verbose and len(args_str) > 120:
             args_str = args_str[:120] + "..."
         return f"  {s(f'[{data["tool"]}]')} {args_str}"
     elif t == "tool_result":
         result = data.get("result", "")
-        if len(result) > 200:
+        if not verbose and len(result) > 200:
             result = result[:200] + "..."
         return f"  {s(f'→ {result}')}"
     elif t == "thinking":
@@ -109,7 +109,7 @@ def send_message_verbose(text: str):
                     data = json.loads(msg)
                     t = data.get("type", "")
 
-                    formatted = _format_event(data)
+                    formatted = _format_event(data, verbose=True)
                     if formatted:
                         print(formatted)
 
@@ -176,7 +176,7 @@ def watch():
                 print("Watching Semillita... (Ctrl+C to stop)")
                 async for msg in ws:
                     data = json.loads(msg)
-                    formatted = _format_event(data)
+                    formatted = _format_event(data, verbose=True)
                     if formatted:
                         print(formatted)
                     elif data.get("type") == "response_complete":
@@ -286,7 +286,7 @@ async def _chat_async(verbose: bool = True, model: str = None):
                         t = data.get("type", "")
 
                         if verbose:
-                            fmt = _format_event(data)
+                            fmt = _format_event(data, verbose=True)
                             if fmt:
                                 _cprint(fmt)
 

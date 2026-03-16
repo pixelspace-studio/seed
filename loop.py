@@ -152,7 +152,7 @@ async def run(
 
             if tc.name == "respond":
                 last_respond = result
-            emit({"type": "tool_result", "tool": tc.name, "result": result[:500]})
+            emit({"type": "tool_result", "tool": tc.name, "result": result})
 
             tool_result_msg = {
                 "role": "tool_result",
