@@ -13,12 +13,34 @@ import httpx
 BASE_URL = "http://localhost:9999"
 WS_URL = "ws://localhost:9999/stream"
 
-# Color scheme (hex)
-_colors = {
+# Color scheme (hex) — persisted to agents/shared/.colors
+_COLORS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agents", "shared", ".colors")
+
+_COLORS_DEFAULT = {
     "system": "6B7280",  # cool gray
     "seed": "A3F7FF",    # electric cyan
     "user": "C4B5FD",    # soft lavender
 }
+
+
+def _load_colors() -> dict:
+    if os.path.exists(_COLORS_FILE):
+        try:
+            with open(_COLORS_FILE) as f:
+                saved = json.load(f)
+            return {**_COLORS_DEFAULT, **saved}
+        except Exception:
+            pass
+    return dict(_COLORS_DEFAULT)
+
+
+def _save_colors():
+    os.makedirs(os.path.dirname(_COLORS_FILE), exist_ok=True)
+    with open(_COLORS_FILE, "w") as f:
+        json.dump(_colors, f)
+
+
+_colors = _load_colors()
 
 
 def _wordwrap(text: str) -> str:
@@ -541,6 +563,7 @@ async def _chat_async(verbose: bool = True, model: str = None):
                                 choice = input(f"  {role} [{sample}\033[0m]: ").strip().lstrip("#")
                                 if choice and len(choice) == 6 and all(ch in "0123456789abcdefABCDEF" for ch in choice):
                                     _colors[role] = choice.upper()
+                            _save_colors()
                             _cprint("")
                             for role in ("system", "seed", "user"):
                                 _cprint(f"  {_hex_to_ansi(_colors[role], f'{role}: #{_colors[role]}')}")
@@ -549,6 +572,7 @@ async def _chat_async(verbose: bool = True, model: str = None):
                             c = parts[2].lstrip("#")
                             if role in _colors and len(c) == 6 and all(ch in "0123456789abcdefABCDEF" for ch in c):
                                 _colors[role] = c.upper()
+                                _save_colors()
                                 _cprint(f"  {_hex_to_ansi(_colors[role], f'{role}: #{_colors[role]}')}")
                             else:
                                 _cprint("  Usage: /color seed FF005A")

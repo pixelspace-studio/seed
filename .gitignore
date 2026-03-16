@@ -44,6 +44,8 @@ Thumbs.db
 
 # Semillita runtime data
 data/
+agents/*/data/
+agents/shared/.colors
 
 # Old project
 .old/
