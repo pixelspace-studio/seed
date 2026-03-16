@@ -242,6 +242,10 @@ async def _chat_async(verbose: bool = True, model: str = None):
     def _newline(event):
         event.current_buffer.insert_text('\n')
 
+    @kb.add('c-l')              # Ctrl+L — clear input line
+    def _clear_line(event):
+        event.current_buffer.reset()
+
     @kb.add('escape')
     def _escape(event):
         if is_working:
