@@ -246,6 +246,54 @@ async def _chat_async(verbose: bool = True, model: str = None):
     def _clear_line(event):
         event.current_buffer.reset()
 
+    # Shift+Arrow selection
+    from prompt_toolkit.selection import SelectionState, SelectionType
+
+    def _start_or_extend_selection(buf):
+        if buf.selection_state is None:
+            buf.selection_state = SelectionState(
+                original_cursor_position=buf.cursor_position,
+                type=SelectionType.CHARACTERS,
+            )
+
+    @kb.add('s-left')
+    def _select_left(event):
+        buf = event.current_buffer
+        _start_or_extend_selection(buf)
+        buf.cursor_position -= 1
+
+    @kb.add('s-right')
+    def _select_right(event):
+        buf = event.current_buffer
+        _start_or_extend_selection(buf)
+        buf.cursor_position += 1
+
+    @kb.add('left')             # Left arrow cancels selection
+    def _left(event):
+        event.current_buffer.selection_state = None
+        event.current_buffer.cursor_position -= 1
+
+    @kb.add('right')            # Right arrow cancels selection
+    def _right(event):
+        event.current_buffer.selection_state = None
+        event.current_buffer.cursor_position += 1
+
+    @kb.add('delete')           # Delete selected text (or char ahead)
+    def _delete(event):
+        buf = event.current_buffer
+        if buf.selection_state:
+            buf.cut_selection()
+        else:
+            buf.delete()
+
+    @kb.add('backspace')        # Backspace deletes selection or char behind
+    def _backspace(event):
+        buf = event.current_buffer
+        if buf.selection_state:
+            buf.cut_selection()
+        else:
+            buf.delete_before_cursor()
+
     @kb.add('escape')
     def _escape(event):
         if is_working:
