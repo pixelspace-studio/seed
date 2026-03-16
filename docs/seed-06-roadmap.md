@@ -279,6 +279,37 @@ Ensure all agent capabilities are accessible via HTTP:
 
 ---
 
+## 13. Secrets Management
+
+Current state: API keys in plain text `.env` file. Works but insecure.
+
+### Strategy: cascading resolution
+
+`config.py` resolves each secret in order:
+1. **Environment variables** — works everywhere (cloud dashboards, Docker, CI)
+2. **macOS Keychain** — when running local on Mac (via `keyring` library)
+3. **`.env` file** — fallback for development
+
+### Why this order
+- Cloud (Render, Railway, Fly): secrets go in the provider's dashboard → injected as env vars
+- Mac Mini local: `./seed.sh config` saves to Keychain, encrypted with user login
+- Development: `.env` file, gitignored
+- No vendor lock-in, no paid services required
+
+### Implementation
+- [ ] Add `keyring` to requirements.txt
+- [ ] Update `config.py` to try env → Keychain → .env
+- [ ] Update `seed.sh config` to save to Keychain on macOS
+- [ ] Document the resolution chain for cloud deployments
+
+### Alternatives considered
+- **1Password CLI** (`op`) — great DX but requires paid subscription
+- **Bitwarden** — open source, self-hosteable, but extra setup
+- **HashiCorp Vault** — enterprise, overkill
+- **SOPS/age** — encrypts .env in git, but adds key management complexity
+
+---
+
 ## Priority Order
 
 1. **Fix what's broken** — browser, max_tokens, validations
